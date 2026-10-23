@@ -1,0 +1,6 @@
+# Load a save written by v0.4.0 (HARNESS_SAV): CONTINUE resumes it.
+60 0 m_title.ppm
+1 1
+1 0
+40 0 m_cont.ppm
+1 0 @$scene,$night,$coins,$shells

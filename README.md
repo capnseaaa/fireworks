@@ -4,7 +4,7 @@ A cozy firework-making game for the Game Boy Advance, played in emulators (built
 
 Planned loop: by day, gather materials around town and sometimes find new patterns. By night, customers ask for fireworks and you build them from a quick menu. At the end of the night, everything you made goes up in a show.
 
-## Current state: v0.4.0, the intro and saving
+## Current state: v0.5.0, shop upgrades and reputation
 - **Title:** CONTINUE, NEW GAME, or FREE PLAY (the v0.1 sandbox; SELECT+START returns to the title).
 - **Intro:** you've just taken over Grandma's firework shop in a seaside town. Nine short pages in your own words, with the controls in brackets. START skips it.
 - **Saving:** the game saves itself at the start of every night and every day. CONTINUE picks up there. NEW GAME asks before replacing a save.
@@ -18,6 +18,8 @@ Planned loop: by day, gather materials around town and sometimes find new patter
   - Quarry: needs a rope (white, silver, scrolls).
   - Market: powder, shells, any colored star, and the tools.
   - START opens the bag. Home opens the shop for the night.
+- **Upgrades** (Home > IMPROVE THE SHOP, during the day): Workbench (3 levels, 15% faster each), Late Hours (2 levels, open until 2 then 3 AM), Shop Sign (2 levels, 15% more pay each), Display Shelf (you notice what customers secretly love). The top levels need a reputation title.
+- **Reputation titles:** Newcomer, Local Favorite (10), Town Treasure (25), Legend (50). Each title means bigger orders and 10% more pay. A new title is announced at review time.
 - **Hidden likes:** a customer may secretly love a color, pattern, or size. Hit it (even by accident) and they love it: more coins and rep, plus a gift: colored stars, a tip, or a scroll that teaches a new pattern.
 - You start knowing peony, chrysanthemum, willow, and ring. Scrolls teach the rest.
 - No sound yet.

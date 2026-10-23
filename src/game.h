@@ -89,6 +89,14 @@ extern int night_made, night_happy, night_coins, night_rep;
 extern const char* const cust_names[];
 void new_game(void);
 void next_night(void);
+// Shop upgrades, bought at home during the day.
+enum { UPG_BENCH, UPG_HOURS, UPG_SIGN, UPG_SHELF, UPG_COUNT };
+typedef struct { const char* name; const char* desc; u8 max; u16 price[3]; u8 need[3]; } Upgrade;
+extern const Upgrade upgrades[UPG_COUNT];
+extern u8 upg[UPG_COUNT];        // level of each
+int rep_tier(void);               // 0..3, from reputation
+extern const char* const rep_titles[4];
+int close_min(void);              // closing time, minutes after 8 PM
 int unlock_pattern(void);         // teaches a random unknown pattern; -1 if none left
 int unlock_count(void);           // patterns known
 enum { SAVE_NIGHT, SAVE_DAY };

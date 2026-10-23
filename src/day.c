@@ -23,11 +23,12 @@ static const Area areas[A_COUNT] = {
 };
 
 // What you can do at each spot. kind picks the result in do_spot().
-enum { K_OPEN, K_WOOD, K_CHARCOAL, K_GROVE, K_SULFUR, K_TUNNEL, K_SAND, K_DRIFT, K_POOLS,
+enum { K_OPEN, K_UPGRADE, K_WOOD, K_CHARCOAL, K_GROVE, K_SULFUR, K_TUNNEL, K_SAND, K_DRIFT, K_POOLS,
        K_CLIMB, K_RUINS, K_BUY_POWDER, K_BUY_SHELLS, K_BUY_STAR, K_BUY_PICK, K_BUY_NET, K_BUY_ROPE };
 typedef struct { u8 area, kind, minutes, needs, price; const char* name; const char* desc; } Spot;
 static const Spot spots[] = {
     { A_HOME, K_OPEN, 0, 0, 0, "OPEN THE SHOP", "END THE DAY AND OPEN FOR THE NIGHT." },
+    { A_HOME, K_UPGRADE, 0, 0, 0, "IMPROVE THE SHOP", "SPEND COINS ON UPGRADES FOR THE SHOP." },
     { A_FOREST, K_WOOD, 60, 0, 0, "CHOP WOOD", "CARVE WOODEN SHELLS. ABOUT 2 SHELLS." },
     { A_FOREST, K_CHARCOAL, 60, 0, 0, "BURN CHARCOAL", "CHARCOAL FOR POWDER. ABOUT 3 POWDER." },
     { A_FOREST, K_GROVE, 40, 0, 0, "SEARCH THE GROVE", "GREEN THINGS GROW HERE. MAYBE MORE." },
@@ -47,7 +48,7 @@ static const Spot spots[] = {
 };
 #define NSPOTS (int)(sizeof spots / sizeof spots[0])
 
-enum { DS_INTRO, DS_MAP, DS_AREA, DS_COLOR, DS_WORK, DS_RESULT, DS_DUSK };
+enum { DS_INTRO, DS_MAP, DS_AREA, DS_COLOR, DS_WORK, DS_RESULT, DS_DUSK, DS_UPGRADE };
 
 int day_st;                            // state (non-static so test scripts can read it)
 int day_min;                           // minutes since 8:00 AM
@@ -56,6 +57,16 @@ static int work_spot, work_from;
 static u32 used;                       // spots done today (bit per spot)
 static char msg[160];
 static u32 page_sig[2];
+static int upg_result;                 // the result came from buying an upgrade
+
+// Why an upgrade cannot be bought now, or 0.
+static const char* upg_blocked(int k) {
+    const Upgrade* u = &upgrades[k];
+    if (upg[k] >= u->max) return "FULLY UPGRADED";
+    if (rep_tier() < u->need[upg[k]]) return u->need[upg[k]] == 1 ? "NEEDS LOCAL FAVORITE" : "NEEDS TOWN TREASURE";
+    if (coins < u->price[upg[k]]) return "NOT ENOUGH COINS";
+    return 0;
+}
 
 static int menu_n, menu_spot[10];
 static int area_menu(void) {           // the spots at the current area
@@ -72,7 +83,7 @@ static int tool_bit(int k) { return k == K_BUY_PICK ? TOOL_PICK : k == K_BUY_NET
 // Why a spot cannot be used right now, or 0.
 static const char* blocked(int i) {
     const Spot* s = &spots[i];
-    if (s->kind == K_OPEN) return 0;
+    if (s->kind == K_OPEN || s->kind == K_UPGRADE) return 0;
     if (s->needs && !(tools & s->needs))
         return s->needs == TOOL_PICK ? "NEEDS A PICKAXE" : s->needs == TOOL_NET ? "NEEDS A NET" : "NEEDS A ROPE";
     if (is_tool(s->kind) && (tools & tool_bit(s->kind))) return "YOU HAVE ONE";
@@ -272,6 +283,7 @@ static void step(void) {
         if (i < 0) { go(DS_MAP); break; }
         if (blocked(i)) break;
         if (spots[i].kind == K_OPEN) { set_scene(SC_SHOP); break; }
+        if (spots[i].kind == K_UPGRADE) { go(DS_UPGRADE); cursor = 0; break; }
         if (spots[i].kind == K_BUY_STAR) { go(DS_COLOR); cursor = 0; break; }
         work_spot = i;
         work_from = day_min;
@@ -287,6 +299,25 @@ static void step(void) {
             stock[cursor]++;
             day_min += 2;
             if (day_min > DAY_END) day_min = DAY_END;
+        }
+        break;
+    case DS_UPGRADE:
+        if (hit & KEY_UP) cursor = (cursor + UPG_COUNT) % (UPG_COUNT + 1);
+        if (hit & KEY_DOWN) cursor = (cursor + 1) % (UPG_COUNT + 1);
+        if (b || (a && cursor == UPG_COUNT)) { area_menu(); cursor = 0; go(DS_AREA); break; }
+        if (a && !upg_blocked(cursor)) {
+            const Upgrade* u = &upgrades[cursor];
+            coins -= u->price[upg[cursor]];
+            upg[cursor]++;
+            msg[0] = 0;
+            char* p = cat(msg, "NEW ");
+            p = cat(p, u->name);
+            p = cat(p, "! ");
+            cat(p, u->desc);
+            upg_result = 1;
+            int keep = cursor;
+            go(DS_RESULT);
+            cursor = keep;
         }
         break;
     case DS_WORK: {
@@ -306,7 +337,10 @@ static void step(void) {
     case DS_RESULT:
         if (a) {
             if (day_min >= DAY_END - 15) dusk();
-            else {
+            else if (upg_result) {
+                upg_result = 0;
+                go(DS_UPGRADE);
+            } else {
                 int keep = cursor;
                 area_menu();
                 cursor = keep < menu_n ? keep : 0;
@@ -341,7 +375,7 @@ static void menu_box(u8* back, int n, const char* const* items, const u8* ok, in
 }
 
 static void draw_bag(u8* back) {
-    box(back, 12, 16, 216, 98);
+    box(back, 12, 16, 216, 118);
     text(back, 22, 22, "BAG", UI_YELLOW);
     char buf[48], *p = cat(buf, "POWDER ");
     p = cat_num(p, powder);
@@ -366,6 +400,20 @@ static void draw_bag(u8* back) {
     p = cat_num(p, unlock_count());
     cat(p, " OF 9");
     text(back, 22, 94, buf, UI_WHITE);
+    p = cat(buf, "REP ");
+    p = cat_num(p, rep);
+    p = cat(p, "  ");
+    cat(p, rep_titles[rep_tier()]);
+    text(back, 22, 104, buf, UI_YELLOW);
+    p = cat(buf, "BENCH ");
+    p = cat_num(p, upg[UPG_BENCH]);
+    p = cat(p, " HOURS ");
+    p = cat_num(p, upg[UPG_HOURS]);
+    p = cat(p, " SIGN ");
+    p = cat_num(p, upg[UPG_SIGN]);
+    p = cat(p, " SHELF ");
+    cat_num(p, upg[UPG_SHELF]);
+    text(back, 22, 114, buf, UI_WHITE);
 }
 
 static void draw_page(u8* back) {
@@ -447,6 +495,36 @@ static void draw_page(u8* back) {
         menu_box(back, 9, items + top, ok + top, cursor - top);
         text(back, 8, 121, "MARKET", UI_YELLOW);
         draw_lines(back, "PICK A COLOR. 8 COINS EACH. B WHEN DONE.", 130, 2, UI_WHITE);
+        break;
+    }
+    case DS_UPGRADE: {
+        const char* items[UPG_COUNT + 1];
+        u8 ok[UPG_COUNT + 1];
+        char labels[UPG_COUNT][24];
+        for (int k = 0; k < UPG_COUNT; k++) {
+            p = cat(labels[k], upgrades[k].name);
+            p = cat(p, " ");
+            p = cat_num(p, upg[k]);
+            p = cat(p, "/");
+            cat_num(p, upgrades[k].max);
+            items[k] = labels[k];
+            ok[k] = !upg_blocked(k);
+        }
+        items[UPG_COUNT] = "BACK";
+        ok[UPG_COUNT] = 1;
+        menu_box(back, UPG_COUNT + 1, items, ok, cursor);
+        text(back, 8, 121, "IMPROVE THE SHOP", UI_YELLOW);
+        if (cursor == UPG_COUNT) draw_lines(back, "BACK TO HOME.", 130, 2, UI_WHITE);
+        else {
+            const Upgrade* u = &upgrades[cursor];
+            draw_lines(back, u->desc, 130, 2, UI_WHITE);
+            const char* why = upg_blocked(cursor);
+            p = buf;
+            if (upg[cursor] < u->max) { p = cat_num(p, u->price[upg[cursor]]); p = cat(p, " COINS"); }
+            if (why && upg[cursor] < u->max) p = cat(p, "  ");
+            if (why) cat(p, why);
+            text(back, 8, 148, buf, why ? UI_RED : UI_GREEN);
+        }
         break;
     }
     case DS_WORK: {

@@ -537,6 +537,7 @@ void review_begin(void) {
     rv_ngifts = 0;
     static const u8 points[6] = { 10, 8, 8, 6, 3, 0 };   // by tier, out of 10
     int sum = 0;
+    int tier0 = rep_tier();
     for (int i = 0; i < ncrate; i++) {
         char gift[48];
         gift[0] = 0;
@@ -547,6 +548,12 @@ void review_begin(void) {
         if (gift[0]) cat(rv_gifts[rv_ngifts++], gift);
     }
     rv_stars = ncrate ? (sum + ncrate) / (2 * ncrate) : 0;   // rounded, 0..5
+    if (rep_tier() > tier0 && rv_ngifts < MAXCRATE) {        // the town knows your name now
+        for (int i = rv_ngifts; i > 0; i--) { rv_gifts[i][0] = 0; cat(rv_gifts[i], rv_gifts[i - 1]); }
+        char* p = cat(rv_gifts[0], "NEW TITLE: ");          // shown first
+        cat(p, rep_titles[rep_tier()]);
+        rv_ngifts++;
+    }
     last_stars = rv_stars;
     if (!ncrate) REG_BLDCNT = (1 << 2) | (1 << 6) | (1 << 13);
 }

@@ -7,7 +7,6 @@
 #define T_CUST   512    // 4 styles x 32 tiles (32x64 sprites)
 #define T_BUBBLE 640    // BUB_COUNT bubbles x 4 tiles (16x16)
 
-#define CLOSE_MIN 300   // minutes after 8:00 PM: closes at 1:00 AM
 #define ARRIVE_MIN 10   // time between customers
 #define CUST_Y 34       // customer sprite top; its bottom row meets the counter
 
@@ -33,6 +32,28 @@ const char* const cust_names[] = {
 };
 #define NNAMES 30
 
+// --- upgrades and reputation ---------------------------------------------------------
+
+u8 upg[UPG_COUNT];
+const Upgrade upgrades[UPG_COUNT] = {
+    { "WORKBENCH", "FIREWORKS TAKE 15% LESS TIME.", 3, { 80, 160, 300 }, { 0, 1, 2 } },
+    { "LATE HOURS", "STAY OPEN ONE HOUR LATER.", 2, { 100, 220 }, { 0, 2 } },
+    { "SHOP SIGN", "CUSTOMERS PAY 15% MORE.", 2, { 120, 250 }, { 0, 2 } },
+    { "DISPLAY SHELF", "NOTICE WHAT CUSTOMERS SECRETLY LOVE.", 1, { 150 }, { 1 } },
+};
+const char* const rep_titles[4] = { "NEWCOMER", "LOCAL FAVORITE", "TOWN TREASURE", "LEGEND" };
+
+int rep_tier(void) { return rep >= 50 ? 3 : rep >= 25 ? 2 : rep >= 10 ? 1 : 0; }
+
+int close_min(void) { return 300 + 60 * upg[UPG_HOURS]; }   // 1 AM, 2 AM, 3 AM
+
+// Minutes to build a firework, after the workbench (rounded to 5, at least 5).
+static int craft_time(int size, int pat) {
+    int m = (size_time[size] + pat_time[pat]) * (100 - 15 * upg[UPG_BENCH]) / 100;
+    m = (m + 2) / 5 * 5;
+    return m < 5 ? 5 : m;
+}
+
 void new_game(void) {
     night = 1;
     coins = 0;
@@ -42,6 +63,7 @@ void new_game(void) {
     for (int i = 0; i < NCOLORS; i++) stock[i] = start_stock[i];
     known = (1 << P_PEONY) | (1 << P_CHRYS) | (1 << P_WILLOW) | (1 << P_RING);
     tools = 0;
+    for (int i = 0; i < UPG_COUNT; i++) upg[i] = 0;
     ncrate = 0;
 }
 
@@ -153,6 +175,7 @@ static void make_customer(void) {
     int pat = random_known_pattern();
     int hue = rnd() % 11;                  // no one asks for silver by name
     int kind = rnd() % 100;
+    if ((int)(rnd() % 100) < 15 * rep_tier()) kind = 40;   // a known shop gets bigger orders
     char* p = cu.body;
     if (kind < 30) {                       // color + pattern
         p = cat(p, "COULD I GET ");
@@ -165,6 +188,7 @@ static void make_customer(void) {
         cu.want_pats = 1 << pat;
     } else if (kind < 45) {                // size + color + pattern, for an occasion
         int sz = rnd() % 3;
+        if (rep_tier() >= 2 && (rnd() & 1)) sz = S_LARGE;
         p = cat(p, "I NEED ");
         p = cat(p, article(want_size_words[sz]));
         p = cat(p, want_size_words[sz]);
@@ -379,6 +403,7 @@ int judge_shell(const Shell* s, char* comment, char* gift) {
     int liked, rel[3];
     int tier = judge(s, &liked, rel);
     int pay = size_pay[s->size] + pat_time[s->pat] / 2;
+    pay = pay * (100 + 15 * upg[UPG_SIGN] + 10 * rep_tier()) / 100;   // the sign and your name
     int drep = 0;
     comment_for(comment, s, tier, rel);
     switch (tier) {
@@ -403,7 +428,7 @@ int judge_shell(const Shell* s, char* comment, char* gift) {
 // --- dialog and menus --------------------------------------------------------------
 
 enum { ST_OPEN, ST_ARRIVE, ST_ASK, ST_CHOICE, ST_SIZE, ST_PAT, ST_COLOR, ST_CONFIRM, ST_CRAFT,
-       ST_THANKS, ST_DECLINE, ST_LEAVE, ST_CLOSED };
+       ST_THANKS, ST_DECLINE, ST_LEAVE, ST_CLOSED, ST_HINT };
 
 int shop_st;                   // state (non-static so test scripts can read it)
 int shop_min;                  // minutes since 8:00 PM
@@ -446,7 +471,7 @@ static void menu_add(const char* s, int ok, int val) {
     menu_n++;
 }
 
-static int time_left(void) { return CLOSE_MIN - shop_min; }
+static int time_left(void) { return close_min() - shop_min; }
 
 static char* time_str(char* p, int m) {
     int h = 8 + m / 60, mm = m % 60;
@@ -460,7 +485,7 @@ static char* time_str(char* p, int m) {
     return cat(p, am ? " AM" : " PM");
 }
 
-static int craft_minutes(void) { return size_time[sel_size] + pat_time[sel_pat]; }
+static int craft_minutes(void) { return craft_time(sel_size, sel_pat); }
 
 // Fills the menu for the current state and the info line for the highlighted item.
 static void build_menu(void) {
@@ -478,14 +503,14 @@ static void build_menu(void) {
         break;
     case ST_SIZE:
         for (int s = 0; s < 3; s++)
-            menu_add(size_names[s], powder >= size_powder[s] && shells > 0 && size_time[s] <= time_left(), s);
+            menu_add(size_names[s], powder >= size_powder[s] && shells > 0 && craft_time(s, P_PEONY) <= time_left(), s);
         {
             int s = menu_val[cursor];
             if (shells == 0) cat(info, "NO SHELLS LEFT!");
             else if (powder < size_powder[s]) cat(info, "NOT ENOUGH POWDER");
-            else if (size_time[s] > time_left()) cat(info, "NOT ENOUGH TIME");
+            else if (craft_time(s, P_PEONY) > time_left()) cat(info, "NOT ENOUGH TIME");
             else {
-                p = cat_num(info, size_time[s]);
+                p = cat_num(info, craft_time(s, P_PEONY));
                 p = cat(p, " MIN, ");
                 p = cat_num(p, size_powder[s]);
                 p = cat(p, " POWDER (HAVE ");
@@ -497,14 +522,14 @@ static void build_menu(void) {
     case ST_PAT:
         for (int k = 0; k < P_COUNT; k++)
             if (known & (1 << k))
-                menu_add(pat_names[k], size_time[sel_size] + pat_time[k] <= time_left(), k);
+                menu_add(pat_names[k], craft_time(sel_size, k) <= time_left(), k);
         {
             int k = menu_val[cursor];
-            int total = size_time[sel_size] + pat_time[k];
+            int total = craft_time(sel_size, k);
             if (total > time_left()) cat(info, "NOT ENOUGH TIME");
             else {
                 p = cat(info, "+");
-                p = cat_num(p, pat_time[k]);
+                p = cat_num(p, total - craft_time(sel_size, P_PEONY));
                 p = cat(p, " MIN (TOTAL ");
                 p = cat_num(p, total);
                 cat(p, " MIN)");
@@ -559,8 +584,27 @@ static char* craft_name(char* p) {
 
 // --- the state machine ---------------------------------------------------------
 
+// With the display shelf, you catch what a customer secretly loves.
+static void shelf_hint(void) {
+    static const char* const sizes[3] = {
+        "(THEY KEEP PICKING UP THE LITTLE SHELLS.)", "(THEY KEEP TURNING A MEDIUM SHELL OVER IN THEIR HANDS.)",
+        "(THEY KEEP EYEING THE BIGGEST SHELLS ON THE SHELF.)",
+    };
+    char buf[96], *p = buf;
+    if (cu.like_type == LIKE_COLOR) {
+        p = cat(p, "(THEY KEEP GLANCING AT THE ");
+        p = cat(p, hue_names[cu.like_val]);
+        cat(p, " STARS ON THE SHELF.)");
+    } else if (cu.like_type == LIKE_PAT) {
+        p = cat(p, "(THEY KEEP STARING AT GRANDMA'S POSTER OF ");
+        p = cat(p, pat_plural[cu.like_val]);
+        cat(p, ".)");
+    } else cat(p, sizes[cu.like_val]);
+    say(0, buf);
+}
+
 static void next_customer(void) {
-    if (time_left() < size_time[S_SMALL] || shells == 0 || powder == 0) {
+    if (time_left() < craft_time(S_SMALL, P_PEONY) || shells == 0 || powder == 0) {
         char buf[160], *p = buf;
         if (shells == 0) p = cat(p, "YOU'RE OUT OF SHELLS, SO YOU CLOSE UP EARLY.");
         else if (powder == 0) p = cat(p, "YOU'RE OUT OF POWDER, SO YOU CLOSE UP EARLY.");
@@ -605,6 +649,7 @@ void shop_enter(void) {
     char buf[160], *p = cat(buf, "NIGHT ");
     p = cat_num(p, night);
     p = cat(p, ". I FLIP THE SIGN TO OPEN.");
+    if (upg[UPG_HOURS]) { p = cat(p, " OPEN UNTIL "); p = time_str(p, close_min()); p = cat(p, "."); }
     if (night == 1) cat(p, " HERE COMES MY FIRST CUSTOMER! (A TO TALK.)");
     say(0, buf);
     go(ST_OPEN);
@@ -630,6 +675,12 @@ static void step(void) {
         if (cx <= 104) { cx = 104; say(1, cu.line); go(ST_ASK); }
         break;
     case ST_ASK:
+        if (a && done) {
+            if (upg[UPG_SHELF] && cu.like_type) { shelf_hint(); go(ST_HINT); }
+            else go(ST_CHOICE);
+        }
+        break;
+    case ST_HINT:
         if (a && done) go(ST_CHOICE);
         break;
     case ST_CHOICE:
@@ -710,7 +761,7 @@ static void step(void) {
         if (cx < -40) {
             show_cust = 0;
             shop_min += ARRIVE_MIN;
-            if (shop_min > CLOSE_MIN) shop_min = CLOSE_MIN;
+            if (shop_min > close_min()) shop_min = close_min();
             next_customer();
         }
         break;
@@ -840,24 +891,39 @@ void shop_update(u8* back) {
 // night and each day; CONTINUE picks up there.
 
 #define SRAM ((volatile u8*)0x0E000000)
-#define SAVE_MAGIC 0x46575231u          // "FWR1"
+#define SAVE_MAGIC 0x46575232u          // "FWR2" (v0.5: upgrades)
+#define SAVE_MAGIC_V1 0x46575231u       // "FWR1" (v0.4): still loads, upgrades start at 0
 __attribute__((used, aligned(4))) static const char save_tag[] = "SRAM_V113";
 
+// Every older layout keeps loading: when the layout changes, add the old struct below,
+// convert it in read_save(), and bump SAVE_MAGIC. An update must never cost a save.
 typedef struct {
     u32 magic;
     u8 phase, pad[3];
     s32 night, coins, rep, powder, shells, tools, last_stars;
     s32 stock[NCOLORS];
     u16 known, pad2;
+    u8 upg[UPG_COUNT];
     u32 sum;
 } Save;
 
-static u32 save_sum(const Save* s) {
-    const u8* b = (const u8*)s;
+typedef struct {                       // v0.4.0
+    u32 magic;
+    u8 phase, pad[3];
+    s32 night, coins, rep, powder, shells, tools, last_stars;
+    s32 stock[NCOLORS];
+    u16 known, pad2;
+    u32 sum;
+} SaveV1;
+
+static u32 checksum(const void* p, unsigned len) {   // over everything but the final sum
+    const u8* b = (const u8*)p;
     u32 sum = 0x1234;
-    for (unsigned i = 0; i < sizeof(Save) - 4; i++) sum = sum * 31 + b[i];
+    for (unsigned i = 0; i + 4 < len; i++) sum = sum * 31 + b[i];
     return sum;
 }
+
+static u32 save_sum(const Save* s) { return checksum(s, sizeof *s); }
 
 void save_game(int phase) {
     Save s;
@@ -868,14 +934,29 @@ void save_game(int phase) {
     s.night = night; s.coins = coins; s.rep = rep; s.powder = powder; s.shells = shells;
     s.tools = tools; s.last_stars = last_stars; s.known = known;
     for (int i = 0; i < NCOLORS; i++) s.stock[i] = stock[i];
+    for (int i = 0; i < UPG_COUNT; i++) s.upg[i] = upg[i];
     s.sum = save_sum(&s);
     for (unsigned i = 0; i < sizeof s; i++) SRAM[i] = b[i];
 }
 
+// Reads the save in whichever layout it was written, as the current one. 0 if none.
 static int read_save(Save* s) {
     u8* b = (u8*)s;
     for (unsigned i = 0; i < sizeof *s; i++) b[i] = SRAM[i];
-    return s->magic == SAVE_MAGIC && s->sum == save_sum(s);
+    if (s->magic == SAVE_MAGIC) return s->sum == save_sum(s);
+    if (s->magic == SAVE_MAGIC_V1) {
+        SaveV1 old;
+        u8* o = (u8*)&old;
+        for (unsigned i = 0; i < sizeof old; i++) o[i] = SRAM[i];
+        if (old.sum != checksum(&old, sizeof old)) return 0;
+        s->phase = old.phase;
+        s->night = old.night; s->coins = old.coins; s->rep = old.rep; s->powder = old.powder;
+        s->shells = old.shells; s->tools = old.tools; s->last_stars = old.last_stars; s->known = old.known;
+        for (int i = 0; i < NCOLORS; i++) s->stock[i] = old.stock[i];
+        for (int i = 0; i < UPG_COUNT; i++) s->upg[i] = 0;   // upgrades are new in v0.5
+        return 1;
+    }
+    return 0;
 }
 
 int has_save(void) {
@@ -891,5 +972,6 @@ int load_game(void) {
     night = s.night; coins = s.coins; rep = s.rep; powder = s.powder; shells = s.shells;
     tools = s.tools; last_stars = s.last_stars; known = s.known;
     for (int i = 0; i < NCOLORS; i++) stock[i] = s.stock[i];
+    for (int i = 0; i < UPG_COUNT; i++) upg[i] = s.upg[i];
     return s.phase;
 }
