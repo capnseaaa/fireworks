@@ -1,0 +1,22 @@
+# Auto show: START, then sample the show and finale. Prints particles and CPU (4389 = full frame).
+30 0
+1 8
+1 0
+300 0 show1.ppm
+300 0 show2.ppm
+1 0 @$nparts,$cpu_ticks
+600 0 show3.ppm
+1 0 @$nparts,$cpu_ticks
+600 0 show4.ppm
+1 0 @$nparts,$cpu_ticks
+200 0 show5.ppm
+1 0 @$nparts,$cpu_ticks
+100 0 show6.ppm
+1 0 @$nparts,$cpu_ticks
+100 0 show7.ppm
+1 0 @$nparts,$cpu_ticks
+100 0 show8.ppm
+1 0 @$nparts,$cpu_ticks
+400 0 show9.ppm
+1 0 @$nparts,$cpu_ticks
+# Peak load across the finale: one sample every 10 frames.

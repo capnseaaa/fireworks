@@ -1,0 +1,124 @@
+# Fire each pattern once; screenshots every 15 frames after it bursts.
+60 0 boot.ppm
+1 1
+95 0
+15 0 peony0.ppm
+15 0 peony1.ppm
+15 0 peony2.ppm
+15 0 peony3.ppm
+15 0 peony4.ppm
+15 0 peony5.ppm
+15 0 peony6.ppm
+60 0
+1 256
+1 0
+1 64
+1 0
+1 1
+95 0
+15 0 chrys0.ppm
+15 0 chrys1.ppm
+15 0 chrys2.ppm
+15 0 chrys3.ppm
+15 0 chrys4.ppm
+15 0 chrys5.ppm
+15 0 chrys6.ppm
+60 0
+1 256
+1 0
+1 1
+95 0
+15 0 willow0.ppm
+15 0 willow1.ppm
+15 0 willow2.ppm
+15 0 willow3.ppm
+15 0 willow4.ppm
+15 0 willow5.ppm
+15 0 willow6.ppm
+60 0
+1 256
+1 0
+1 64
+1 0
+1 1
+95 0
+15 0 palm0.ppm
+15 0 palm1.ppm
+15 0 palm2.ppm
+15 0 palm3.ppm
+15 0 palm4.ppm
+15 0 palm5.ppm
+15 0 palm6.ppm
+60 0
+1 256
+1 0
+1 64
+1 0
+1 1
+95 0
+15 0 ring0.ppm
+15 0 ring1.ppm
+15 0 ring2.ppm
+15 0 ring3.ppm
+15 0 ring4.ppm
+15 0 ring5.ppm
+15 0 ring6.ppm
+60 0
+1 256
+1 0
+1 64
+1 0
+1 1
+95 0
+15 0 cross0.ppm
+15 0 cross1.ppm
+15 0 cross2.ppm
+15 0 cross3.ppm
+15 0 cross4.ppm
+15 0 cross5.ppm
+15 0 cross6.ppm
+60 0
+1 256
+1 0
+1 64
+1 0
+1 64
+1 0
+1 64
+1 0
+1 64
+1 0
+1 1
+95 0
+15 0 heart0.ppm
+15 0 heart1.ppm
+15 0 heart2.ppm
+15 0 heart3.ppm
+15 0 heart4.ppm
+15 0 heart5.ppm
+15 0 heart6.ppm
+60 0
+1 256
+1 0
+1 1
+95 0
+15 0 crackle0.ppm
+15 0 crackle1.ppm
+15 0 crackle2.ppm
+15 0 crackle3.ppm
+15 0 crackle4.ppm
+15 0 crackle5.ppm
+15 0 crackle6.ppm
+60 0
+1 256
+1 0
+1 1
+95 0
+15 0 glitter0.ppm
+15 0 glitter1.ppm
+15 0 glitter2.ppm
+15 0 glitter3.ppm
+15 0 glitter4.ppm
+15 0 glitter5.ppm
+15 0 glitter6.ppm
+60 0

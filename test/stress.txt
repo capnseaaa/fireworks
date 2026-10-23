@@ -1,0 +1,12 @@
+# Volleys of 5 random shells; print particle count and CPU ticks (4389 = one frame).
+60 0
+1 2
+1 0
+1 2
+1 0
+1 2
+130 0 @$nparts,$cpu_ticks,$clear_ticks,$step_ticks
+1 0 stress.ppm
+10 0 @$nparts,$cpu_ticks,$clear_ticks,$step_ticks
+20 0 @$nparts,$cpu_ticks,$clear_ticks,$step_ticks
+30 0 @$nparts,$cpu_ticks,$clear_ticks,$step_ticks
