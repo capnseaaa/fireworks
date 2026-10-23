@@ -679,7 +679,7 @@ static void draw_card(u8* back) {
         }
         y += 9;
     }
-    if (t > tl + 20 && (frame & 16)) text_center(back, cy + chh - 14, "A: NEXT NIGHT", UI_YELLOW);
+    if (t > tl + 20 && (frame & 16)) text_center(back, cy + chh - 14, "A: NEXT DAY", UI_YELLOW);
 }
 
 static int card_done(void) {
@@ -714,7 +714,7 @@ void review_update(u8* back) {
     } else {
         if (hit & KEY_A) {
             if (!card_done()) rv_t = 1000;          // skip to the end of the animation
-            else { next_night(); set_scene(SC_SHOP); return; }
+            else { next_night(); set_scene(SC_DAY); return; }
         }
         for (int k = 0; k < rv_stars; k++)
             if (rv_t == STAR_T0 + k * STAR_GAP) {   // a star lands

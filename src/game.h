@@ -16,7 +16,7 @@ extern const u8 size_time[3], pat_time[P_COUNT], size_powder[3], size_pay[3];
 // --- main.c: frame, input, sprites, scenes ---
 extern volatile u32 frame;
 extern u16 keys, hit;            // held, newly pressed
-enum { SC_TITLE, SC_FREE, SC_SHOP, SC_SHOW, SC_REVIEW };
+enum { SC_TITLE, SC_FREE, SC_SHOP, SC_SHOW, SC_REVIEW, SC_DAY };
 extern int scene;
 void set_scene(int s);            // switches at the start of the next frame
 void blank_once(void);            // hide the screen until the next drawn frame (scene loads)
@@ -58,6 +58,12 @@ void review_update(u8* back);
 extern int last_stars;
 extern u32 cpu_ticks;
 
+// --- day.c: the town map ---
+enum { TOOL_PICK = 1, TOOL_NET = 2, TOOL_ROPE = 4 };
+extern int tools;
+void day_enter(void);
+void day_update(u8* back);
+
 // --- shop.c ---
 void shop_enter(void);
 void shop_update(u8* back);
@@ -80,5 +86,7 @@ extern int night_made, night_happy, night_coins, night_rep;
 extern const char* const cust_names[];
 void new_game(void);
 void next_night(void);
+int unlock_pattern(void);         // teaches a random unknown pattern; -1 if none left
+int unlock_count(void);           // patterns known
 enum { T_LOVE, T_HAPPY, T_SURPRISE, T_CLOSE, T_NOPE, T_REFUND };
 int judge_shell(const Shell* s, char* comment, char* gift);

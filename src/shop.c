@@ -41,16 +41,28 @@ void new_game(void) {
     shells = START_SHELLS;
     for (int i = 0; i < NCOLORS; i++) stock[i] = start_stock[i];
     known = (1 << P_PEONY) | (1 << P_CHRYS) | (1 << P_WILLOW) | (1 << P_RING);
+    tools = 0;
     ncrate = 0;
 }
 
-// No day phase yet: each new night tops materials back up to the starting amounts.
+// Materials no longer refill: the day is for gathering and buying them.
 void next_night(void) {
     night++;
-    for (int i = 0; i < NCOLORS; i++)
-        if (stock[i] < start_stock[i]) stock[i] = start_stock[i];
-    if (powder < START_POWDER) powder = START_POWDER;
-    if (shells < START_SHELLS) shells = START_SHELLS;
+}
+
+int unlock_pattern(void) {
+    u16 locked = ((1 << P_COUNT) - 1) & ~known;
+    if (!locked) return -1;
+    int pat;
+    do pat = rnd() % P_COUNT; while (!(locked & (1 << pat)));
+    known |= 1 << pat;
+    return pat;
+}
+
+int unlock_count(void) {
+    int n = 0;
+    for (int i = 0; i < P_COUNT; i++) n += (known >> i) & 1;
+    return n;
 }
 
 // --- customers -------------------------------------------------------------------
@@ -258,9 +270,7 @@ static char* give_gift(char* p) {
     u32 r = rnd() % 100;
     u16 locked = ((1 << P_COUNT) - 1) & ~known;
     if (r < 30 && locked) {
-        int pat;
-        do pat = rnd() % P_COUNT; while (!(locked & (1 << pat)));
-        known |= 1 << pat;
+        int pat = unlock_pattern();
         p = cat(p, "NEW SCROLL: ");
         return cat(p, pat_plural[pat]);
     }
