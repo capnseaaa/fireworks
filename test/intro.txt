@@ -1,0 +1,20 @@
+# Fresh boot: title, NEW GAME, the intro pages (typing and done), then START skips to the shop.
+40 0 i_title.ppm
+1 1
+1 0
+20 0 i_p1a.ppm
+40 0 i_p1b.ppm
+1 1
+1 0
+1 1
+1 0
+1 1
+1 0
+70 0 i_p3.ppm
+1 1
+1 0
+70 0 i_p4.ppm
+1 8
+1 0
+40 0 i_shop.ppm
+1 0 @$scene,$night

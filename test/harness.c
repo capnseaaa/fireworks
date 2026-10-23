@@ -15,8 +15,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+// Set HARNESS_LOG=1 to print the emulator's own log (bad memory accesses, save type detection).
 static void nolog(struct mLogger* l, int c, enum mLogLevel lv, const char* f, va_list a) {
-    (void)l; (void)c; (void)lv; (void)f; (void)a;
+    (void)l; (void)c;
+    if (!getenv("HARNESS_LOG") || lv == mLOG_DEBUG) return;
+    vprintf(f, a);
+    putchar('\n');
 }
 static struct mLogger logger = { .log = nolog };
 

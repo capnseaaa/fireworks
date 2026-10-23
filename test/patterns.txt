@@ -1,4 +1,9 @@
 # Fire each pattern once; screenshots every 15 frames after it bursts.
+30 0
+1 128
+1 0
+1 1
+1 0
 60 0 boot.ppm
 1 1
 95 0

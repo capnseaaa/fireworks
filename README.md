@@ -4,8 +4,10 @@ A cozy firework-making game for the Game Boy Advance, played in emulators (built
 
 Planned loop: by day, gather materials around town and sometimes find new patterns. By night, customers ask for fireworks and you build them from a quick menu. At the end of the night, everything you made goes up in a show.
 
-## Current state: v0.3.0, the day
-- **Title:** NEW GAME or FREE PLAY (the v0.1 sandbox; SELECT+START returns to the title).
+## Current state: v0.4.0, the intro and saving
+- **Title:** CONTINUE, NEW GAME, or FREE PLAY (the v0.1 sandbox; SELECT+START returns to the title).
+- **Intro:** you've just taken over Grandma's firework shop in a seaside town. Nine short pages in your own words, with the controls in brackets. START skips it.
+- **Saving:** the game saves itself at the start of every night and every day. CONTINUE picks up there. NEW GAME asks before replacing a save.
 - **Night:** customers walk up with requests, some exact ("A BIG RED PEONY"), some vague ("A PERFECT CIRCLE IN THE SKY"). Build each one from quick menus: size, pattern, color. Bigger and fancier fireworks take more time on the night clock (8:00 PM to 1:00 AM) and use powder, shells, and colored stars. Or turn a customer away.
 - **The show:** at closing time, every firework you made goes up. You don't see whose is whose.
 - **Review time:** each customer's comment pops up over the town, then the night gets a 0-5 star rating with coins, reputation, and gifts.
@@ -18,7 +20,7 @@ Planned loop: by day, gather materials around town and sometimes find new patter
   - START opens the bag. Home opens the shop for the night.
 - **Hidden likes:** a customer may secretly love a color, pattern, or size. Hit it (even by accident) and they love it: more coins and rep, plus a gift: colored stars, a tip, or a scroll that teaches a new pattern.
 - You start knowing peony, chrysanthemum, willow, and ring. Scrolls teach the rest.
-- No saving yet. No sound.
+- No sound yet.
 
 ## How it draws
 - Mode 4 bitmap, two pages. Up to 1600 particles, simulated and drawn by ARM code in IWRAM (`src/render.c`).

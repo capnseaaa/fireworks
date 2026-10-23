@@ -339,6 +339,7 @@ FONT = {
     ">": "01000 01100 01110 01111 01110 01100 01000",
     "*": "00000 01010 11111 11111 01110 00100 00000",
     "#": "00100 01110 11111 01110 01010 10001 00000",
+    '"': "01010 01010 10100 00000 00000 00000 00000",
     " ": "00000 00000 00000 00000 00000 00000 00000",
 }
 FONT_CHARS = "".join(FONT.keys())
@@ -823,7 +824,7 @@ arr("u32", "bubble_tiles", [f"0x{w:08X}" for w in bubble_words], 8)
 hdr.append("enum { " + ", ".join(f"BUB_{n.upper()}" for n in bubble_names) + ", BUB_COUNT };")
 hdr.append(f"#define FONT_N {len(FONT_CHARS)}")
 hdr.append("extern const char FONT_CHARS[FONT_N + 1];")
-src.append(f'const char FONT_CHARS[FONT_N + 1] = "{FONT_CHARS}";')
+src.append('const char FONT_CHARS[FONT_N + 1] = "' + FONT_CHARS.replace('\\', '\\\\').replace('"', '\\"') + '";')
 rows = []
 for ch in FONT_CHARS:
     for r in FONT[ch].split():

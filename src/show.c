@@ -230,8 +230,8 @@ void show_sprites(void) {
     if (!hidden(204, 34, 16, 16)) sprite(204, 34, T_MOON, 0, 1, 3);
     for (int i = 0; i < 24; i++)
         if (!hidden(star_xy[i][0] + 3, star_xy[i][1] + 3, 1, 1)) sprite(star_xy[i][0], star_xy[i][1], T_STAR, 0, 0, 2);
-    // In review time the town sits behind the bitmap, so cards and bubbles cover it.
-    for (int k = 0; k < 4; k++) sprite(k * 64, 96, (T_SKY + k * 64) | (scene == SC_REVIEW ? 1 << 10 : 0), 0, 3, 0);
+    // In review time and the intro the town sits behind the bitmap, so boxes cover it.
+    for (int k = 0; k < 4; k++) sprite(k * 64, 96, (T_SKY + k * 64) | (scene == SC_REVIEW || scene == SC_INTRO ? 1 << 10 : 0), 0, 3, 0);
 }
 
 // --- shells --------------------------------------------------------------------
@@ -345,7 +345,7 @@ static void sky_frame(u8* back) {
 static int show_on, show_count, show_wait, hud_on = 1, msg_timer;
 static const char* msg;
 static int cur_pat, cur_hue = H_RED;
-static int title_cursor, title_wait;
+static int title_cursor, title_wait, title_saved, title_confirm;
 static int ns_idx, ns_wait, ns_end;
 
 void show_enter(void) {
@@ -370,6 +370,9 @@ void show_enter(void) {
     show_on = 0;
     msg_timer = 0;
     title_wait = 30;
+    title_saved = has_save();
+    title_confirm = 0;
+    title_cursor = title_saved ? 0 : 1;
     ns_idx = 0;
     ns_wait = 60;
     ns_end = 0;
@@ -386,18 +389,31 @@ void title_update(u8* back) {
         launch_random();
         title_wait = 50 + rnd() % 70;
     }
-    if (hit & (KEY_UP | KEY_DOWN)) title_cursor ^= 1;
+    static const char* const items[3] = { "CONTINUE", "NEW GAME", "FREE PLAY" };
+    int first = title_saved ? 0 : 1;   // no CONTINUE without a save
+    if (title_cursor < first) title_cursor = first;
+    if (hit & KEY_UP) { title_cursor = title_cursor > first ? title_cursor - 1 : 2; title_confirm = 0; }
+    if (hit & KEY_DOWN) { title_cursor = title_cursor < 2 ? title_cursor + 1 : first; title_confirm = 0; }
     if (hit & (KEY_A | KEY_START)) {
-        if (title_cursor == 0) { new_game(); set_scene(SC_SHOP); }
-        else set_scene(SC_FREE);
+        if (title_cursor == 0) {
+            int phase = load_game();
+            if (phase >= 0) set_scene(phase == SAVE_DAY ? SC_DAY : SC_SHOP);
+        } else if (title_cursor == 1) {
+            if (title_saved && !title_confirm) title_confirm = 1;   // ask before replacing a save
+            else { new_game(); set_scene(SC_INTRO); }
+        } else set_scene(SC_FREE);
     }
     sky_frame(back);
     text_big(back, (240 - 9 * 12) / 2, 26, "FIREWORKS", UI_YELLOW);
     text_center(back, 46, "A COZY FIREWORK SHOP", UI_WHITE);
-    static const char* const items[2] = { "NEW GAME", "FREE PLAY" };
-    for (int i = 0; i < 2; i++) {
-        text(back, 90, 66 + i * 11, items[i], title_cursor == i ? UI_YELLOW : UI_WHITE);
-        if (title_cursor == i) text(back, 80, 66 + i * 11, ">", UI_YELLOW);
+    for (int i = first; i < 3; i++) {
+        int y = 62 + (i - first) * 11;
+        text(back, 90, y, items[i], title_cursor == i ? UI_YELLOW : UI_WHITE);
+        if (title_cursor == i) text(back, 80, y, ">", UI_YELLOW);
+    }
+    if (title_confirm) {
+        text_center(back, 100, "START OVER? YOUR SAVE WILL BE", UI_WHITE);
+        text_center(back, 110, "REPLACED. PRESS A AGAIN.", UI_WHITE);
     }
     show_sprites();
 }
@@ -767,4 +783,60 @@ void review_update(u8* back) {
 
 int review_shake(void) {               // screen offset for this frame's shake
     return shake ? ((shake & 1) ? 2 : -2) : 0;
+}
+
+// --- intro: the new shopkeeper, in their own words --------------------------------
+
+static const char* const intro_pages[] = {
+    "GRANDMA RAN THE LITTLE FIREWORK SHOP IN THIS SEASIDE TOWN FOR FORTY YEARS.",
+    "THIS SPRING SHE HANDED ME THE KEYS. \"THE TOWN NEEDS ITS FIREWORKS,\" SHE SAID. \"DON'T LET THE SKY GO DARK.\"",
+    "SO HERE'S HOW IT GOES. EACH NIGHT I OPEN THE SHOP, AND PEOPLE TELL ME WHAT THEY'D LOVE TO SEE IN THE SKY.",
+    "I BUILD EACH ONE AT THE COUNTER: A SIZE, A PATTERN, A COLOR. (D-PAD TO PICK, A TO CHOOSE, B TO GO BACK.)",
+    "FANCY ONES TAKE LONGER, AND I CLOSE AT 1 AM. I CAN'T MAKE EVERYTHING, SO I'LL CHOOSE WISELY.",
+    "AT CLOSING TIME, EVERYTHING I MADE GOES UP IN ONE BIG SHOW. AFTERWARD, EVERYONE TELLS ME WHAT THEY THOUGHT.",
+    "GRANDMA SAYS SOME FOLKS SECRETLY LOVE THINGS THEY NEVER ASK FOR. I SHOULD PAY ATTENTION.",
+    "BY DAY I'LL WALK AROUND TOWN FOR POWDER, SHELLS, AND COLORED STARS. (START OPENS MY BAG.)",
+    "OKAY. DEEP BREATH. TIME TO FLIP THE SIGN TO OPEN.",
+};
+#define INTRO_N (int)(sizeof intro_pages / sizeof intro_pages[0])
+static int in_page, in_shown, in_wait;
+static char in_lines[4][41];
+static int in_n, in_len;
+
+static void intro_page(int i) {
+    in_page = i;
+    in_shown = 0;
+    in_n = wrap(intro_pages[i], 37, in_lines, 4);
+    in_len = 0;
+    while (intro_pages[i][in_len]) in_len++;
+}
+
+void intro_begin(void) {
+    intro_page(0);
+    in_wait = 40;
+}
+
+void intro_update(u8* back) {
+    if (in_shown < in_len) in_shown += 2;
+    if (hit & KEY_START) { set_scene(SC_SHOP); return; }      // skip the intro
+    if (hit & KEY_A) {
+        if (in_shown < in_len) in_shown = in_len;
+        else if (in_page + 1 < INTRO_N) intro_page(in_page + 1);
+        else { set_scene(SC_SHOP); return; }
+    }
+    if (--in_wait <= 0) {                                      // a quiet firework now and then
+        launch(40 + rnd() % 160, rnd() % 5, rnd() % NCOLORS, rnd() % 2);
+        in_wait = 120 + rnd() % 100;
+    }
+    sky_frame(back);
+    box(back, 0, 116, 240, 44);
+    win_on = 1;                        // the box stays solid while the sky glows
+    win_x0 = 0; win_y0 = 116; win_x1 = 240; win_y1 = 160;
+    text_typed(back, 8, 121, in_lines, in_n, in_shown, UI_WHITE);
+    if (in_shown >= in_len && (frame & 16)) fill_rect(back, 226, 150, 5, 3, UI_YELLOW);
+    char buf[8], *p = cat_num(buf, in_page + 1);
+    p = cat(p, "/");
+    cat_num(p, INTRO_N);
+    text(back, 236 - text_w(buf), 106, buf, UI_GRAY);
+    show_sprites();
 }

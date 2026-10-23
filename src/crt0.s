@@ -9,7 +9,7 @@ _start:
     .fill   156, 1, 0
 
     .ascii  "FIREWORKS   "      @ game title, 12 bytes
-    .ascii  "FWRK"              @ game code
+    .ascii  "ZFWK"              @ game code (not F...: mGBA treats those as NES Classics, EEPROM saves)
     .ascii  "01"                @ maker code
     .byte   0x96                @ fixed value
     .byte   0x00                @ unit code

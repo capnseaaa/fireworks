@@ -1,6 +1,8 @@
 # Title -> new game -> first customer -> make a firework -> reaction.
 40 0 n_title.ppm
 1 1
+20 0
+1 8
 1 0
 40 0 n_open.ppm
 1 1

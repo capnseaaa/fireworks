@@ -83,6 +83,19 @@ int wrap(const char* s, int maxchars, char out[][41], int maxlines) {
     return n;
 }
 
+// Typewriter text: lines are wrapped from the whole message first, then only the first
+// `shown` characters appear, so a word never jumps to the next line as it types out.
+void text_typed(u8* page, int x, int y, char lines[][41], int n, int shown, int color) {
+    for (int i = 0; i < n && shown > 0; i++) {
+        char buf[41];
+        int k = 0;
+        while (lines[i][k] && k < shown) { buf[k] = lines[i][k]; k++; }
+        buf[k] = 0;
+        text(page, x, y + 9 * i, buf, color);
+        shown -= k + 1;                 // the space or newline between lines
+    }
+}
+
 char* cat(char* d, const char* s) {
     while (*s) *d++ = *s++;
     *d = 0;

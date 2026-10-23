@@ -598,13 +598,14 @@ void shop_enter(void) {
     ncrate = 0;
     page_sig[0] = page_sig[1] = 0;
     names_used = 0;
+    save_game(SAVE_NIGHT);
     night_made = night_happy = night_coins = night_rep = 0;
     show_cust = 0;
     bubble = -1;
     char buf[160], *p = cat(buf, "NIGHT ");
     p = cat_num(p, night);
-    p = cat(p, ". THE SHOP IS OPEN!");
-    if (night == 1) cat(p, "\nMAKE WHAT CUSTOMERS ASK FOR. BIGGER AND FANCIER FIREWORKS TAKE MORE TIME.");
+    p = cat(p, ". I FLIP THE SIGN TO OPEN.");
+    if (night == 1) cat(p, " HERE COMES MY FIRST CUSTOMER! (A TO TALK.)");
     say(0, buf);
     go(ST_OPEN);
 }
@@ -733,6 +734,8 @@ static void draw(u8* back) {
     u32 sig = 2166136261u;
     int vals[] = { shop_st, dlg_shown, dlg_len, cursor, shop_min, ncrate, coins, rep, (int)(frame & 16), shop_st == ST_CRAFT ? st_t : 0, dlg_who, night };
     for (unsigned i = 0; i < sizeof vals / sizeof vals[0]; i++) sig = mix(sig, vals[i]);
+    for (int i = 0; i < dlg_len; i += 3) sig = mix(sig, dlg[i]);   // the words themselves
+    sig = mix(sig, cu.name);
     int pi = back == PAGE1;
     int same = page_sig[pi] == sig;
     page_sig[pi] = sig;
@@ -775,14 +778,10 @@ static void draw_page(u8* back) {
         for (int i = 0; i < n; i++) text(back, 8, y + 9 * (i + 1), lines[i], UI_WHITE);
         text(back, 8, y + 27, info, menu_ok[cursor] ? UI_GREEN : UI_RED);
     } else {
-        char shown[200];
-        int k;
-        for (k = 0; k < dlg_shown && dlg[k]; k++) shown[k] = dlg[k];
-        shown[k] = 0;
         int row = 0;
         if (dlg_who) { text(back, 8, y, cust_names[cu.name], UI_YELLOW); row = 1; }
-        int n = wrap(shown, 37, lines, 4 - row);
-        for (int i = 0; i < n; i++) text(back, 8, y + 9 * (row + i), lines[i], UI_WHITE);
+        int n = wrap(dlg, 37, lines, 4 - row);
+        text_typed(back, 8, y + 9 * row, lines, n, dlg_shown, UI_WHITE);
         if (shop_st == ST_CRAFT) {
             fill_rect(back, 8, 146, 224, 6, UI_SHADOW);
             fill_rect(back, 8, 146, 224 * st_t / 72, 6, UI_YELLOW);
@@ -833,4 +832,64 @@ static void draw_sprites(void) {
 void shop_update(u8* back) {
     step();
     draw(back);
+}
+
+// --- saving ------------------------------------------------------------------------
+// Battery-backed SRAM at 0x0E000000, one byte at a time. The "SRAM_V" tag tells
+// emulators which save type to give the cart. A save is written at the start of each
+// night and each day; CONTINUE picks up there.
+
+#define SRAM ((volatile u8*)0x0E000000)
+#define SAVE_MAGIC 0x46575231u          // "FWR1"
+__attribute__((used, aligned(4))) static const char save_tag[] = "SRAM_V113";
+
+typedef struct {
+    u32 magic;
+    u8 phase, pad[3];
+    s32 night, coins, rep, powder, shells, tools, last_stars;
+    s32 stock[NCOLORS];
+    u16 known, pad2;
+    u32 sum;
+} Save;
+
+static u32 save_sum(const Save* s) {
+    const u8* b = (const u8*)s;
+    u32 sum = 0x1234;
+    for (unsigned i = 0; i < sizeof(Save) - 4; i++) sum = sum * 31 + b[i];
+    return sum;
+}
+
+void save_game(int phase) {
+    Save s;
+    u8* b = (u8*)&s;
+    for (unsigned i = 0; i < sizeof s; i++) b[i] = 0;
+    s.magic = SAVE_MAGIC;
+    s.phase = phase;
+    s.night = night; s.coins = coins; s.rep = rep; s.powder = powder; s.shells = shells;
+    s.tools = tools; s.last_stars = last_stars; s.known = known;
+    for (int i = 0; i < NCOLORS; i++) s.stock[i] = stock[i];
+    s.sum = save_sum(&s);
+    for (unsigned i = 0; i < sizeof s; i++) SRAM[i] = b[i];
+}
+
+static int read_save(Save* s) {
+    u8* b = (u8*)s;
+    for (unsigned i = 0; i < sizeof *s; i++) b[i] = SRAM[i];
+    return s->magic == SAVE_MAGIC && s->sum == save_sum(s);
+}
+
+int has_save(void) {
+    Save s;
+    return read_save(&s);
+}
+
+// Restores the saved game; returns the phase to resume (SAVE_NIGHT or SAVE_DAY), or -1.
+int load_game(void) {
+    Save s;
+    if (!read_save(&s)) return -1;
+    new_game();
+    night = s.night; coins = s.coins; rep = s.rep; powder = s.powder; shells = s.shells;
+    tools = s.tools; last_stars = s.last_stars; known = s.known;
+    for (int i = 0; i < NCOLORS; i++) stock[i] = s.stock[i];
+    return s.phase;
 }

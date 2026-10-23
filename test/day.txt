@@ -1,6 +1,8 @@
 # Night 1 by mashing A, through review time, into day 2; then explore the map.
 40 0
 1 1
+20 0
+1 8
 1 0
 1 1
 8 0

@@ -208,6 +208,7 @@ void day_enter(void) {
     OBJ_PAL[3] = RGB(31, 31, 31);
     OBJ_PAL[4] = RGB(31, 24, 18);
     OBJ_PAL[5] = RGB(8, 14, 28);
+    save_game(SAVE_DAY);
     day_min = 0;
     here = A_HOME;
     sel = A_HOME;
@@ -216,8 +217,8 @@ void day_enter(void) {
     page_sig[0] = page_sig[1] = 0;
     char* p = cat(msg, "DAY ");
     p = cat_num(p, night);
-    p = cat(p, ". GATHER MATERIALS FOR TONIGHT!");
-    if (night == 2) cat(p, "\nEVERY TRIP TAKES TIME. THE SUN SETS AT 6:00 PM.");
+    p = cat(p, ". TIME TO GATHER SUPPLIES FOR TONIGHT.");
+    if (night == 2) cat(p, " EVERY WALK TAKES TIME, AND THE SUN SETS AT 6 PM. (D-PAD TO PICK A PLACE, A TO GO.)");
     go(DS_INTRO);
 }
 
@@ -468,6 +469,7 @@ void day_update(u8* back) {
     int vals[] = { day_st, sel, here, cursor, day_min, coins, bag_open, day_st == DS_WORK ? st_t : 0, powder, shells,
                    stock[0] + stock[1] * 3 + stock[cursor % NCOLORS] * 7 };
     for (unsigned i = 0; i < sizeof vals / sizeof vals[0]; i++) sig = (sig ^ (u32)vals[i]) * 16777619u;
+    for (int i = 0; msg[i]; i += 3) sig = (sig ^ (u8)msg[i]) * 16777619u;   // the words themselves
     int pi = back == PAGE1;
     if (page_sig[pi] != sig) { page_sig[pi] = sig; draw_page(back); }
     // The player stands at the current area; a bouncing arrow marks the selection.

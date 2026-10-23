@@ -39,6 +39,7 @@ static void enter(int s) {
     if (s == SC_SHOP) shop_enter();
     else if (s == SC_DAY) day_enter();
     else if (s == SC_TITLE || s == SC_FREE || s == SC_SHOW) show_enter();
+    else if (s == SC_INTRO) { show_enter(); intro_begin(); }
     else if (s == SC_REVIEW) {
         if (from == SC_SHOP) show_enter();   // a night with no show
         review_begin();
@@ -92,6 +93,7 @@ int main(void) {
         case SC_SHOW: nightshow_update(back); break;
         case SC_REVIEW: review_update(back); break;
         case SC_DAY: day_update(back); break;
+        case SC_INTRO: intro_update(back); break;
         }
         for (int i = noam; i < 128; i++) { oam[i * 4] = 0x200; oam[i * 4 + 1] = 0; oam[i * 4 + 2] = 0; }
         cpu_ticks = REG_TM2D;

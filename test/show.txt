@@ -1,5 +1,10 @@
 # Auto show: START, then sample the show and finale. Prints particles and CPU (4389 = full frame).
 30 0
+1 128
+1 0
+1 1
+1 0
+30 0
 1 8
 1 0
 300 0 show1.ppm

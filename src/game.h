@@ -16,7 +16,7 @@ extern const u8 size_time[3], pat_time[P_COUNT], size_powder[3], size_pay[3];
 // --- main.c: frame, input, sprites, scenes ---
 extern volatile u32 frame;
 extern u16 keys, hit;            // held, newly pressed
-enum { SC_TITLE, SC_FREE, SC_SHOP, SC_SHOW, SC_REVIEW, SC_DAY };
+enum { SC_TITLE, SC_FREE, SC_SHOP, SC_SHOW, SC_REVIEW, SC_DAY, SC_INTRO };
 extern int scene;
 void set_scene(int s);            // switches at the start of the next frame
 void blank_once(void);            // hide the screen until the next drawn frame (scene loads)
@@ -36,6 +36,7 @@ const u8* glyph_rows(char c);     // 7 rows of 5 bits, or 0
 void box(u8* page, int x, int y, int w, int h);
 void frame_rect(u8* page, int x, int y, int w, int h, int t, int c);
 int wrap(const char* s, int maxchars, char out[][41], int maxlines);
+void text_typed(u8* page, int x, int y, char lines[][41], int n, int shown, int color);
 char* cat(char* d, const char* s);
 char* cat_num(char* d, int v);
 
@@ -54,6 +55,8 @@ void free_update(u8* back);
 void title_update(u8* back);
 void nightshow_update(u8* back);
 void review_begin(void);
+void intro_begin(void);
+void intro_update(u8* back);
 void review_update(u8* back);
 extern int last_stars;
 extern u32 cpu_ticks;
@@ -88,5 +91,9 @@ void new_game(void);
 void next_night(void);
 int unlock_pattern(void);         // teaches a random unknown pattern; -1 if none left
 int unlock_count(void);           // patterns known
+enum { SAVE_NIGHT, SAVE_DAY };
+void save_game(int phase);
+int has_save(void);
+int load_game(void);              // the phase to resume, or -1
 enum { T_LOVE, T_HAPPY, T_SURPRISE, T_CLOSE, T_NOPE, T_REFUND };
 int judge_shell(const Shell* s, char* comment, char* gift);
