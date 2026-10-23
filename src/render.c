@@ -10,6 +10,31 @@ Burst bursts[MAXBURST];
 int nbursts;
 int pops;
 u32 rng_state = 0x1234567;
+u16 grad[160];
+
+// Called by the BIOS on each interrupt (ARM mode). On HBlank, it sets the backdrop for
+// the next line from VCOUNT, so it stays right even if some HBlanks were missed.
+// (v0.1.0 used HBlank DMA for this; Delta on iOS drew it as colored stripes.)
+IWRAM_CODE void irq_handler(void) {
+    u16 f = *(vu16*)0x04000202 & *(vu16*)0x04000200;
+    if (f & 2) {
+        int next = *(vu16*)0x04000006 + 1;
+        if (next >= 228) next = 0;
+        if (next < 160) *(vu16*)0x05000000 = grad[next];
+    }
+    *(vu16*)0x04000202 = f;
+    *(vu16*)0x03007FF8 |= f;          // BIOS copy of IF, for VBlankIntrWait users
+}
+
+IWRAM_CODE void clear_page(u8* page) {
+    register u32* p asm("r0") = (u32*)page;
+    register u32* end asm("r1") = (u32*)(page + 240 * 160);
+    asm volatile(
+        "mov r2, #0\n mov r3, #0\n mov r4, #0\n mov r5, #0\n"
+        "mov r6, #0\n mov r7, #0\n mov r8, #0\n mov r9, #0\n"
+        "1: stmia %0!, {r2-r9}\n stmia %0!, {r2-r9}\n cmp %0, %1\n blt 1b\n"
+        : "+r"(p) : "r"(end) : "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "cc", "memory");
+}
 
 Kind kinds[K_COUNT] = {
     //            grav drag trail spacing fade flags

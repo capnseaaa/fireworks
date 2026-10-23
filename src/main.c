@@ -1,12 +1,13 @@
 // Fireworks show prototype: a night sky over a small town. Launch shells and watch.
 // Mode 4 bitmap (two pages) for particles, blended additively over a per-line sky
-// gradient (HBlank DMA). Skyline, stars, moon, and text are sprites.
+// gradient (HBlank interrupt). Skyline, stars, moon, and text are sprites.
 #include "fw.h"
 #include "tables.h"
 
 #define REG16(a) (*(vu16*)(a))
 #define REG32(a) (*(vu32*)(a))
 #define REG_DISPCNT   REG16(0x04000000)
+#define REG_DISPSTAT  REG16(0x04000004)
 #define REG_VCOUNT    REG16(0x04000006)
 #define REG_BG2PA     REG16(0x04000020)
 #define REG_BG2PB     REG16(0x04000022)
@@ -26,16 +27,17 @@
 #define REG_SNDCNT_L  REG16(0x04000080)
 #define REG_SNDCNT_H  REG16(0x04000082)
 #define REG_SNDCNT_X  REG16(0x04000084)
-#define REG_DMA0SAD   REG32(0x040000B0)
-#define REG_DMA0DAD   REG32(0x040000B4)
-#define REG_DMA0CNT   REG32(0x040000B8)
 #define REG_DMA3SAD   REG32(0x040000D4)
 #define REG_DMA3DAD   REG32(0x040000D8)
 #define REG_DMA3CNT   REG32(0x040000DC)
 #define REG_TM2D      REG16(0x04000108)
 #define REG_TM2CNT    REG16(0x0400010A)
 #define REG_KEYINPUT  REG16(0x04000130)
+#define REG_IE        REG16(0x04000200)
+#define REG_IF        REG16(0x04000202)
 #define REG_WAITCNT   REG16(0x04000204)
+#define REG_IME       REG16(0x04000208)
+#define IRQ_VECTOR    REG32(0x03007FFC)
 
 #define BG_PAL   ((vu16*)0x05000000)
 #define OBJ_PAL  ((vu16*)0x05000200)
@@ -59,7 +61,6 @@ u32 cpu_ticks;                // last frame's work, in 1/64 cycles (4389 = one f
 u32 clear_ticks, step_ticks;  // parts of it: clearing the page, particles
 static u16 oam[128 * 4];
 static int noam;
-static u16 grad[168];         // sky color per scanline (HBlank DMA source)
 static u16 base_grad[160];
 static int flash, flash_hue;
 static u8 hue_rgb[15][3] = {
@@ -149,7 +150,6 @@ static void update_light(void) {
     if (flash == 0 && last == 0) return;
     last = flash;
     for (int y = 0; y < 160; y++) grad[y] = flash ? tint(base_grad[y], 160 + (159 - y)) : base_grad[y];
-    for (int y = 160; y < 168; y++) grad[y] = grad[159];
     static const u16 sky_cols[6] = { 0, RGB(5, 4, 10), RGB(2, 2, 5), RGB(31, 24, 10), RGB(14, 10, 6), RGB(1, 1, 3) };
     for (int i = 1; i < 6; i++) OBJ_PAL[i] = flash && i != 3 ? tint(sky_cols[i], i == 1 ? 110 : 200) : sky_cols[i];
 }
@@ -467,7 +467,7 @@ int main(void) {
     make_skyline();
     make_font();
     make_stars();
-    for (int y = 0; y < 168; y++) grad[y] = base_grad[y < 160 ? y : 159];
+    for (int y = 0; y < 160; y++) grad[y] = base_grad[y];
     update_light();
     dma_fill32(PAGE0, 0xA000 / 4 * 2);
     REG_BG2PA = 256; REG_BG2PB = 0; REG_BG2PC = 0; REG_BG2PD = 256;
@@ -477,6 +477,11 @@ int main(void) {
     REG_BLDALPHA = 16 | (16 << 8);
     sound_init();
     cur_hue = H_RED;
+    IRQ_VECTOR = (u32)irq_handler;
+    REG_DISPSTAT = 1 << 4;         // HBlank interrupt
+    REG_IE = 2;
+    REG_IF = 0xFFFF;
+    REG_IME = 1;
 
     int page = 0;
     u16 prev = 0;
@@ -487,12 +492,6 @@ int main(void) {
         page ^= 1;
         REG_DISPCNT = (REG_DISPCNT & ~0x10) | (page ? 0 : 0x10);
         u8* back = page ? PAGE1 : PAGE0;
-        // Sky gradient: line 0 now, the rest one per HBlank.
-        REG_DMA0CNT = 0;
-        BG_PAL[0] = grad[0];
-        REG_DMA0SAD = (u32)&grad[1];
-        REG_DMA0DAD = 0x05000000;
-        REG_DMA0CNT = 1 | (2u << 21) | (1u << 25) | (2u << 28) | (1u << 31);
         for (int i = 0; i < 128 * 4; i++) OAM[i] = oam[i];
         update_light();
         twinkle();
@@ -520,7 +519,7 @@ int main(void) {
         if (msg_timer) msg_timer--;
 
         u32 t0 = REG_TM2D;
-        dma_fill32(back, 240 * 160 / 4);
+        clear_page(back);
         u32 t1 = REG_TM2D;
         step_draw(back);
         u32 t2 = REG_TM2D;

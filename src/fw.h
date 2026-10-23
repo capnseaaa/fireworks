@@ -54,5 +54,10 @@ static inline u32 rnd(void) {
     return rng_state = x;
 }
 
+extern u16 grad[160];     // sky color per scanline, set by the HBlank interrupt
+
 // Moves every particle one frame and draws it into a mode 4 page. Lives in IWRAM.
 __attribute__((long_call)) void step_draw(u8* page);
+// Clears a mode 4 page with the CPU, so the HBlank interrupt is never held up by DMA.
+__attribute__((long_call)) void clear_page(u8* page);
+void irq_handler(void);
