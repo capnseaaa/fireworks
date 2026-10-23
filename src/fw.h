@@ -27,7 +27,7 @@ typedef struct {
 } Kind;
 
 enum { K_DEAD, K_ROCKET, K_SPARK, K_PEONY, K_CHRYS, K_WILLOW, K_PALM, K_CROSS, K_CRACKLE,
-       K_GLITTER, K_POP, K_KID, K_COUNT };
+       K_GLITTER, K_POP, K_KID, K_GLINT, K_COUNT };
 enum { F_ROCKET = 1, F_SPLIT = 2, F_CRACKLE = 4, F_FLICKER = 8, F_BRIGHT = 16 };
 
 // Hues index the BG palette: color = 16 + hue * 16 + brightness (0..15).

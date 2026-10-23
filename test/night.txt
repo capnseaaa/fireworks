@@ -1,0 +1,42 @@
+# Title -> new game -> first customer -> make a firework -> reaction.
+40 0 n_title.ppm
+1 1
+1 0
+40 0 n_open.ppm
+1 1
+1 0
+1 1
+1 0
+70 0 n_ask.ppm
+1 1
+1 0
+1 1
+1 0
+5 0 n_choice.ppm
+1 1
+1 0
+5 0 n_size.ppm
+1 128
+1 0
+1 1
+1 0
+5 0 n_pat.ppm
+1 1
+1 0
+5 0 n_color.ppm
+1 1
+1 0
+5 0 n_confirm.ppm
+1 1
+1 0
+36 0 n_craft.ppm
+60 0 n_react.ppm
+1 0 @$shop_st,$shop_min,$coins,$rep,$ncrate
+1 1
+1 0
+5 0 n_reward.ppm
+1 1
+1 0
+30 0 n_leave.ppm
+80 0 n_next.ppm
+1 0 @$shop_st,$shop_min,$cpu_ticks

@@ -48,6 +48,7 @@ Kind kinds[K_COUNT] = {
     [K_GLITTER] = { 2, 4, 0, 1, 0, F_FLICKER },
     [K_POP]     = { 0, 2, 0, 1, 0, F_BRIGHT },
     [K_KID]     = { 3, 5, 4, 1, 3, 0 },
+    [K_GLINT]   = { 1, 4, 3, 1, 4, F_BRIGHT },   // review time sparkles
 };
 
 // Mode 4 VRAM only takes 16-bit writes. A dimmer pixel never covers a brighter one.
@@ -148,4 +149,53 @@ IWRAM_CODE void step_draw(u8* page) {
         i++;
     }
     nparts = n;
+}
+
+// --- page drawing for the menus and text ----------------------------------------
+
+static inline void put(u8* page, int x, int y, int c) {
+    vu16* p = (vu16*)(page + y * 240 + (x & ~1));
+    if (x & 1) *p = (*p & 0xFF) | (c << 8);
+    else *p = (*p & 0xFF00) | c;
+}
+
+IWRAM_CODE void copy_page(u8* dst, const u8* src) {
+    register u32* d asm("r0") = (u32*)dst;
+    register const u32* s asm("r1") = (const u32*)src;
+    register u32* end asm("r2") = (u32*)(dst + 240 * 160);
+    asm volatile(
+        "1: ldmia %1!, {r3-r10}\n stmia %0!, {r3-r10}\n cmp %0, %2\n blt 1b\n"
+        : "+r"(d), "+r"(s) : "r"(end) : "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10", "cc", "memory");
+}
+
+IWRAM_CODE void fill_rect(u8* page, int x, int y, int w, int h, int c) {
+    if (x < 0) { w += x; x = 0; }
+    if (y < 0) { h += y; y = 0; }
+    if (x + w > 240) w = 240 - x;
+    if (y + h > 160) h = 160 - y;
+    if (w <= 0 || h <= 0) return;
+    u32 cc = c | (c << 8);
+    cc |= cc << 16;
+    int x1 = x + w;                           // one past the last column
+    for (int yy = y; yy < y + h; yy++) {
+        u8* row = page + yy * 240;
+        int xx = x;
+        if (xx & 1) { put(page, xx, yy, c); xx++; }
+        if ((xx & 2) && xx + 2 <= x1) { *(vu16*)(row + xx) = cc; xx += 2; }
+        while (xx + 4 <= x1) { *(vu32*)(row + xx) = cc; xx += 4; }
+        if (xx + 2 <= x1) { *(vu16*)(row + xx) = cc; xx += 2; }
+        if (xx < x1) put(page, xx, yy, c);
+    }
+}
+
+// A 5x7 glyph: rows hold 5 bits, the leftmost pixel in bit 4. Shadow goes 1 px down-right.
+IWRAM_CODE void draw_glyph(u8* page, int x, int y, const u8* rows, int c, int shadow) {
+    if (x < 0 || y < 0 || x > 233 || y > 151) return;
+    if (shadow)
+        for (int r = 0; r < 7; r++)
+            for (int b = 0; b < 5; b++)
+                if (rows[r] & (16 >> b)) put(page, x + b + 1, y + r + 1, shadow);
+    for (int r = 0; r < 7; r++)
+        for (int b = 0; b < 5; b++)
+            if (rows[r] & (16 >> b)) put(page, x + b, y + r, c);
 }
