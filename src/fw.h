@@ -44,7 +44,6 @@ extern Part parts[MAXP];
 extern int nparts;
 extern Burst bursts[MAXBURST];
 extern int nbursts;
-extern int pops;          // crackle pops this frame (for sound)
 extern u32 rng_state;
 extern Kind kinds[K_COUNT];
 

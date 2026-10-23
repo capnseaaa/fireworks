@@ -8,7 +8,6 @@ Part parts[MAXP];
 int nparts;
 Burst bursts[MAXBURST];
 int nbursts;
-int pops;
 u32 rng_state = 0x1234567;
 u16 grad[160];
 
@@ -85,7 +84,6 @@ IWRAM_CODE void step_draw(u8* page) {
                     add(&n, p->x, p->y, (int)(r & 127) - 64, (int)((r >> 7) & 127) - 64,
                         3 + ((r >> 14) & 3), H_WHITE, K_POP);
                 }
-                pops++;
             } else if (k->flags & F_SPLIT) {
                 // Four kids in a + or an x.
                 int s = 260, d = 184;

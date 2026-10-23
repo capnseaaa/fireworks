@@ -17,16 +17,6 @@
 #define REG_BG2Y      REG32(0x0400002C)
 #define REG_BLDCNT    REG16(0x04000050)
 #define REG_BLDALPHA  REG16(0x04000052)
-#define REG_SND1SWEEP REG16(0x04000060)
-#define REG_SND1CNT   REG16(0x04000062)
-#define REG_SND1FREQ  REG16(0x04000064)
-#define REG_SND2CNT   REG16(0x04000068)
-#define REG_SND2FREQ  REG16(0x0400006C)
-#define REG_SND4CNT   REG16(0x04000078)
-#define REG_SND4FREQ  REG16(0x0400007C)
-#define REG_SNDCNT_L  REG16(0x04000080)
-#define REG_SNDCNT_H  REG16(0x04000082)
-#define REG_SNDCNT_X  REG16(0x04000084)
 #define REG_DMA3SAD   REG32(0x040000D4)
 #define REG_DMA3DAD   REG32(0x040000D8)
 #define REG_DMA3CNT   REG32(0x040000DC)
@@ -301,43 +291,6 @@ static void twinkle(void) {
     OBJ_PAL[32 + 1] = RGB(v, v, v + 2 > 31 ? 31 : v + 2);
 }
 
-// --- sound (PSG only) ----------------------------------------------------------
-
-static int boom_delay[MAXBURST], boom_size[MAXBURST];
-static int boom_busy;
-
-static void sound_init(void) {
-    REG_SNDCNT_X = 0x80;
-    REG_SNDCNT_L = 0xFF77;
-    REG_SNDCNT_H = 0x0002;
-}
-
-static void snd_launch(void) {
-    REG_SND1SWEEP = (2 << 4) | 3;
-    REG_SND1CNT = (4 << 12) | (2 << 8) | (2 << 6);
-    REG_SND1FREQ = 0x8000 | 1300;
-}
-
-static void snd_boom(int size) {
-    REG_SND4CNT = ((10 + size * 2) << 12) | (5 << 8);
-    REG_SND4FREQ = 0x8000 | (6 << 4) | 4;
-    REG_SND2CNT = ((8 + size) << 12) | (1 << 8) | (2 << 6);
-    REG_SND2FREQ = 0x8000 | 120;
-    boom_busy = 40;
-}
-
-static void update_sound(void) {
-    // Light first, sound later: booms trail their bursts a little.
-    for (int i = 0; i < MAXBURST; i++)
-        if (boom_delay[i] && --boom_delay[i] == 0) snd_boom(boom_size[i]);
-    if (boom_busy) boom_busy--;
-    if (pops && !boom_busy && (frame & 1)) {
-        REG_SND4CNT = (6 << 12) | (1 << 8);
-        REG_SND4FREQ = 0x8000 | 0x08 | (2 << 4) | 1;
-    }
-    pops = 0;
-}
-
 // --- shells --------------------------------------------------------------------
 
 static void add(int x, int y, int vx, int vy, int life, int hue, int kind) {
@@ -416,8 +369,6 @@ static void explode(const Burst* b) {
     }
     flash = 14 + size * 4;
     flash_hue = pat == P_WILLOW ? H_WILLOW : hue;
-    for (int i = 0; i < MAXBURST; i++)
-        if (!boom_delay[i]) { boom_delay[i] = 10 + (rnd() & 7); boom_size[i] = size; break; }
 }
 
 static void launch(int x, int pat, int hue, int size) {
@@ -427,7 +378,6 @@ static void launch(int x, int pat, int hue, int size) {
     int v0 = isqrt(2048 * h);                  // reaches the apex with gravity 4 (8.8)
     add(x << 6, 152 << 6, (int)(rnd() & 31) - 16, -v0, 255, hue, K_ROCKET);
     parts[nparts - 1].aux = pat | (size << 4);
-    snd_launch();
 }
 
 static void launch_random(void) {
@@ -475,7 +425,6 @@ int main(void) {
     // BG2 adds onto the sky backdrop: 1st target BG2, 2nd target backdrop, both at full weight.
     REG_BLDCNT = (1 << 2) | (1 << 6) | (1 << 13);
     REG_BLDALPHA = 16 | (16 << 8);
-    sound_init();
     cur_hue = H_RED;
     IRQ_VECTOR = (u32)irq_handler;
     REG_DISPSTAT = 1 << 4;         // HBlank interrupt
@@ -527,7 +476,6 @@ int main(void) {
         for (int i = 0; i < nbursts; i++) explode(&bursts[i]);
         nbursts = 0;
         if (flash) flash--;
-        update_sound();
         build_oam();
         cpu_ticks = REG_TM2D;
     }
