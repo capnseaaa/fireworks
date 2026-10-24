@@ -35,7 +35,7 @@ static const Spot spots[] = {
     { A_BEACH, K_BEACH, 0, 0, 0, "EXPLORE", "ROCKS FULL OF TIDE POOLS: SHELLS, SEA GLASS, CORAL, AMBER. A NET REACHES INTO THE POOLS." },
     { A_QUARRY, K_QUARRY, 0, TOOL_ROPE, 0, "EXPLORE", "A STEPPED STONE PIT: WHITE STONE, SILVER, GOLD, OLD CRATES. NEEDS A ROPE." },
     { A_QUARRY, K_CLIMBMG, 30, TOOL_ROPE, 0, "CLIMB THE CLIFF", "PRESS THE HOLDS AS THEY LIGHT UP. THE HIGHER, THE BETTER. NEEDS A ROPE." },
-    { A_MARKET, K_BUY_POWDER, 10, 0, 12, "3 POWDER", "THREE SCOOPS OF BLACK POWDER." },
+    { A_MARKET, K_BUY_POWDER, 10, 0, 12, "5 POWDER", "FIVE SCOOPS OF BLACK POWDER." },
     { A_MARKET, K_BUY_SHELLS, 10, 0, 15, "2 SHELLS", "TWO PAPER SHELLS, READY TO FILL." },
     { A_MARKET, K_BUY_STAR, 10, 0, 8, "1 STAR", "ONE COLORED STAR. PICK THE COLOR." },
     { A_MARKET, K_BUY_PICK, 10, 0, 0, "PICKAXE", "BREAKS ROCKS IN THE MINE. BETTER ONES BREAK HARD ROCK FASTER." },
@@ -138,7 +138,7 @@ static char* time_str(char* p, int m) {
 
 static void do_spot(int i) {
     switch (spots[i].kind) {
-    case K_BUY_POWDER: powder += 3; cat(msg, "YOU BOUGHT 3 POWDER."); break;
+    case K_BUY_POWDER: powder += 5; cat(msg, "YOU BOUGHT 5 POWDER."); break;
     case K_BUY_SHELLS: shells += 2; cat(msg, "YOU BOUGHT 2 SHELLS."); break;
     case K_BUY_PICK: gear[GEAR_PICK]++; cat(msg, gear[GEAR_PICK] == 1 ? "A PICKAXE! TIME TO TRY THE MINE." : "A BETTER PICKAXE! ROCKS BREAK FASTER."); break;
     case K_BUY_LANTERN: gear[GEAR_LANTERN] = 1; cat(msg, "A LANTERN! NOW I CAN GO DEEPER THAN FLOOR 4."); break;

@@ -20,10 +20,11 @@ int night_made, night_happy, night_coins, night_rep;
 const u8 size_time[3] = { 15, 25, 35 };
 const u8 pat_time[P_COUNT] = { 0, 10, 15, 15, 10, 20, 25, 15, 15 };
 const u8 size_powder[3] = { 1, 2, 3 };
-const u8 size_pay[3] = { 8, 15, 25 };
+const u8 size_pay[3] = { 10, 20, 32 };
 static const u8 start_stock[NCOLORS] = { 3, 0, 3, 0, 0, 3, 0, 3, 0, 2, 2, 0 };
-#define START_POWDER 12
-#define START_SHELLS 8
+#define START_POWDER 24
+#define START_SHELLS 10
+#define START_COINS 40
 
 const char* const cust_names[] = {
     "MABEL", "OTTO", "JUNE", "FINN", "ROSA", "ELI", "IVY", "TOBY", "NELL", "GUS",
@@ -56,7 +57,7 @@ static int craft_time(int size, int pat) {
 
 void new_game(void) {
     night = 1;
-    coins = 0;
+    coins = START_COINS;
     rep = 0;
     powder = START_POWDER;
     shells = START_SHELLS;

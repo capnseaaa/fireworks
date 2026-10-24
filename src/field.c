@@ -65,7 +65,7 @@ enum { F_WALK, F_KILN, F_GEODE, F_HOOK, F_CLIMB };
 static int fstate;
 static int heat, zone, zone_v, score, kiln_t;   // the kiln minigame
 static int geode_n, geode_pos, geode_v, geode_wait;   // the geode minigame
-static int hook_casts, hook_t, hook_got, hook_bottle; // the driftwood minigame
+static int hook_casts, hook_t, hook_got, hook_bottle, hook_caught; // the driftwood minigame
 static int climb_h, climb_miss, climb_key, climb_t, climb_left, climb_flash;   // the climb
 static s16 log_x[3], log_v[3];
 static u8 log_kind[3];                                 // 0 none, 1 log, 2 bottle
@@ -472,7 +472,7 @@ static void land_swing(void) {
             return;
         }
         n->type = N_GONE;
-        if (rnd() % 100 < 25 && take(1)) { powder++; pop(n->x, n->y - 20, "+1 POWDER"); }
+        if (rnd() % 100 < 35 && take(1)) { powder++; pop(n->x, n->y - 20, "+1 POWDER"); }
         return;
     }
     if (n->type == N_QSTONE) {
@@ -490,7 +490,7 @@ static void land_swing(void) {
     if (n->type == N_ORE) {
         n->type = N_GONE;
         if (n->color == ORE_SULFUR) {
-            int got = take(2);
+            int got = take(3);
             powder += got;
             pop_items(n->x, n->y - 20, got, "POWDER");
         } else {
@@ -537,7 +537,7 @@ static void kiln_step(void) {
     if (zone < 22 || zone > 78 || (rnd() % 90) == 0) zone_v = -zone_v;
     if (heat > zone - 10 && heat < zone + 10) score++;
     if (kiln_t >= 480) {                               // eight seconds
-        int got = take(1 + score * 4 / 480 + (score > 400));
+        int got = take(2 + score * 4 / 480 + (score > 400));
         powder += got;
         spend(30);
         kiln_used = 1;
@@ -637,13 +637,23 @@ static void hook_start(void) {
 static void hook_step(void) {
     for (int k = 0; k < 3; k++) {                         // logs drift by, left to right
         if (!log_kind[k]) {
-            if (rnd() % 60 == 0) { log_kind[k] = rnd() % 8 == 0 ? 2 : 1; log_x[k] = 28; log_v[k] = 1 + rnd() % 2; }
+            if (rnd() % 30 == 0) { log_kind[k] = rnd() % 8 == 0 ? 2 : 1; log_x[k] = 28; log_v[k] = 1 + rnd() % 2; }
             continue;
         }
         log_x[k] += log_v[k];
         if (log_x[k] > 212) log_kind[k] = 0;
     }
     if (hook_t) {
+        // While the hook is in the water, it snags the first log or bottle it touches.
+        if (!hook_caught && hook_t <= 16 && hook_t >= 4)
+            for (int k = 0; k < 3; k++)
+                if (log_kind[k] && HOOK_X >= log_x[k] - 3 && HOOK_X <= log_x[k] + 18) {
+                    if (log_kind[k] == 2) hook_bottle = 1;
+                    else hook_got++;
+                    log_kind[k] = 0;
+                    hook_caught = 1;
+                    break;
+                }
         if (--hook_t == 0 && hook_casts == 0) {           // the last cast is back
             int got = take(hook_got);
             shells += got;
@@ -666,13 +676,7 @@ static void hook_step(void) {
     if ((hit & KEY_A) && hook_casts) {                    // drop the hook
         hook_casts--;
         hook_t = 20;
-        for (int k = 0; k < 3; k++)
-            if (log_kind[k] && log_x[k] > HOOK_X - 12 && log_x[k] < HOOK_X + 4) {
-                if (log_kind[k] == 2) hook_bottle = 1;
-                else hook_got++;
-                log_kind[k] = 0;
-                break;
-            }
+        hook_caught = 0;
     }
 }
 
