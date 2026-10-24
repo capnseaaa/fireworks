@@ -1224,6 +1224,282 @@ for name, (gem, light) in ORE_COLORS.items():
     pal_[3], pal_[4] = gem, light
     ore_pals += [rgb15_early(c) for c in pal_]
 
+
+
+
+# ---- the coast: terraced tide pools ----------------------------------------------------
+# Three rock terraces stepping down to the sea, each with a cliff face and a shadow at its
+# foot, joined by ramps. Pools sink into every level. The way back is a wooden stair up the
+# cliff in the top-left corner. Exports the picture, a walkability grid (8x8 cells), the pool
+# spots, and the rocky point where you fish for driftwood.
+bc = Image.new("P", (W, H), M["r1"])
+mp, mpx, md = bc, bc.load(), ImageDraw.Draw(bc)
+mrng = random.Random(77)
+FACE = 9                                        # cliff face height in pixels
+
+
+def level(x, y):                                # 3 = cliff top, 2, 1, 0 = lowest rock, -1 = sea
+    t = x * 0.42 + y + 6 * math.sin(x / 13.0) + 4 * math.sin(y / 9.0 + x / 31.0)
+    if t > 214 + 5 * math.sin(x / 7.0): return -1
+    if y < 30 - 6 * math.sin(x / 19.0) and x > 40: return 3
+    return 2 if t < 98 else 1 if t < 156 else 0
+
+
+RAMPS = [(70, 86), (150, 166), (96, 112), (188, 204)]   # x spans where a cliff becomes a slope
+
+
+def on_ramp(x, y):
+    return any(a <= x <= b for a, b in RAMPS)
+
+
+lv = [[level(x, y) for x in range(W)] for y in range(H)]
+face = [[0] * W for _ in range(H)]               # 1..FACE: this pixel is that far down a cliff face
+for y in range(12, H):
+    for x in range(W):
+        if lv[y][x] < 0: continue
+        for k in range(1, FACE + 1):
+            if y - k >= 12 and lv[y - k][x] > lv[y][x]:
+                face[y][x] = k
+                break
+
+# Slabs: each terrace top is split into stone slabs (nearest of scattered points).
+slab_pts = [(mrng.randrange(-10, 250), mrng.randrange(10, 170)) for _ in range(110)]
+slab_tone = [mrng.random() for _ in slab_pts]
+TOPS = {3: ("g1", "g2", "r2"), 2: ("r2", "r3", "r1"), 1: ("r1", "r2", "r0"), 0: ("r0", "r1", "cave")}   # darker toward the sea
+for y in range(12, H):
+    for x in range(W):
+        L = lv[y][x]
+        if L < 0:                                # the sea, darker further out
+            d = x * 0.42 + y - 214
+            c = "w2" if d < 8 else "w1" if d < 28 else "w0"
+            if mrng.random() < 0.03: c = "w3"
+            P(x, y, c)
+            continue
+        k = face[y][x]
+        if k and not on_ramp(x, y):              # cliff face: vertical striations, darker lower down
+            c = "r1" if k < 3 else "r0" if k < FACE - 1 else "cave"
+            if (x * 7 + y // 3) % 5 == 0: c = "r0" if c == "r1" else "cave"
+            if k == 1: c = "ol"
+            P(x, y, c)
+            continue
+        if k and on_ramp(x, y):                  # a worn slope down: darker, a few step edges
+            c = "r1" if k % 4 else "r0"
+            if x in (min(a for a, b in RAMPS if a <= x <= b), max(b for a, b in RAMPS if a <= x <= b)): c = "ol"
+            P(x, y, c)
+            continue
+        if L == 3:                               # grassy clifftop
+            n = noise(x + 7, y, 6) + (mrng.random() - 0.5) * 0.5
+            P(x, y, "g0" if n < -0.5 else "g1" if n < 0.3 else "g2" if n < 0.8 else "g3")
+            continue
+        ds = sorted(((x - a) ** 2 + ((y - b) * 1.4) ** 2, i) for i, (a, b) in enumerate(slab_pts))
+        d0 = math.sqrt(ds[0][0])
+        gap = math.sqrt(ds[1][0]) - d0
+        hi, mid, lo = TOPS[L]
+        if gap < 1.0:
+            P(x, y, "ol")
+        else:
+            # Each rock is lit from the top left: lighter on the side facing the light.
+            ax, ay = slab_pts[ds[0][1]]
+            sh = -((x - ax) + (y - ay) * 1.4) / (d0 + gap + 0.01) + (mrng.random() - 0.5) * 0.5
+            sh += (slab_tone[ds[0][1]] - 0.5) * 0.6
+            c = hi if sh > 0.35 else mid if sh > -0.45 else lo
+            if gap < 2.0 and sh < 0: c = lo
+            P(x, y, c)
+        # Shadow at the foot of a cliff.
+        for j in range(FACE + 1, FACE + 4):
+            if y - j >= 12 and lv[y - j][x] > L and not on_ramp(x, y):
+                P(x, y, "r0" if L > 0 else "cave")
+                break
+# Foam where the sea meets the rock, and wet sheen on the lowest rocks.
+for y in range(12, H):
+    for x in range(1, W - 1):
+        if lv[y][x] < 0 and (lv[y][x - 1] >= 0 or (y > 12 and lv[y - 1][x] >= 0)):
+            for dx in range(-1, 3):
+                if mrng.random() < 0.7: P(x + dx, y + mrng.randint(0, 1), "w3")
+        if lv[y][x] == 0 and not face[y][x] and mrng.random() < 0.004: P(x, y, "w3")
+for _ in range(70):                              # breaking wave crests
+    x, y = mrng.randrange(W), mrng.randrange(40, H)
+    if level(x, y) < 0:
+        for k in range(4): P(x + k, y - (1 if 0 < k < 3 else 0), "w3" if 0 < k < 3 else "w2")
+
+# Tide pools sunk into the rock: shadowed inner rim (top left), lit rim (bottom right),
+# deeper water toward the middle, seaweed, an anemone or urchin.
+POOLS = [(66, 54, 16, 8), (132, 58, 13, 7), (34, 96, 15, 8), (96, 92, 12, 7), (158, 100, 15, 8), (60, 132, 14, 8),
+         (122, 134, 13, 7), (196, 74, 11, 6)]
+pool_cells = set()
+for (cx, cy, rx, ry) in POOLS:
+    pix = []
+    for y in range(cy - ry - 1, cy + ry + 2):
+        for x in range(cx - rx - 2, cx + rx + 3):
+            ang = math.atan2(y - cy, x - cx)
+            wob = 1 + 0.18 * math.sin(ang * 3 + cx) + 0.1 * math.sin(ang * 5 + cy)
+            if ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= wob:
+                pix.append((x, y))
+    sp = set(pix)
+    for (x, y) in pix:
+        d = ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2
+        c = "wd" if d < 0.25 else "w0" if d < 0.6 else "w1"
+        if (x - 1, y) not in sp or (x, y - 1) not in sp: c = "cave"          # rim in shadow
+        elif (x + 1, y) not in sp or (x, y + 1) not in sp: c = "w2"          # lit far edge
+        P(x, y, c)
+        pool_cells.add((x // 8, y // 8))
+    for (x, y) in pix:                                                       # stone lip
+        for dx, dy in ((1, 0), (0, 1), (1, 1)):
+            if (x + dx, y + dy) not in sp and lv[min(H - 1, y + dy)][min(W - 1, x + dx)] >= 0:
+                P(x + dx, y + dy, "r3")
+    P(cx + rx // 3, cy - 1, "w3"); P(cx + rx // 3 + 1, cy - 1, "w3"); P(cx - rx // 2, cy + 1, "w3")
+    for k in range(2):                                                       # seaweed
+        sx = cx - rx // 2 + k * rx // 2
+        for j in range(4): P(sx + (j % 2), cy + ry // 2 - j, "l1" if j < 2 else "l2")
+    if (cx // 7) % 2:                                                        # an anemone
+        for (dx, dy) in ((0, 0), (-1, 0), (1, 0), (0, -1), (-1, -1), (1, -1)): P(cx + 3 + dx, cy + 1 + dy, "fl_p")
+        P(cx + 3, cy, "fl_r")
+    else:                                                                    # an urchin
+        for (dx, dy) in ((0, 0), (1, 0), (0, 1), (1, 1)): P(cx - 4 + dx, cy + dy, "bl0")
+        for (dx, dy) in ((-1, -1), (2, -1), (-1, 2), (2, 2)): P(cx - 4 + dx, cy + dy, "ol")
+# Barnacles and mussels on the lower rocks.
+for _ in range(14):                              # clusters near the water
+    cx, cy = mrng.randrange(W), mrng.randrange(80, H)
+    if level(cx, cy) != 0: continue
+    for _ in range(6):
+        x, y = cx + mrng.randint(-3, 3), cy + mrng.randint(-2, 2)
+        if level(x, y) == 0 and not face[y][x]: P(x, y, "bl0"); P(x + 1, y, "ol")
+# Seaweed draped over cliff edges.
+for _ in range(26):
+    x = mrng.randrange(4, W - 4)
+    for y in range(14, H):
+        if face[y][x] == 1 and not on_ramp(x, y):
+            for j in range(mrng.randint(3, 6)): P(x + (j % 2), y + j, "l1" if j % 2 else "l0")
+            break
+# The wooden stair up the cliff, top left: the way back.
+for y in range(12, 40):
+    for x in range(10, 30):
+        P(x, y, "wd2" if (y % 5) == 0 else "wd1" if (x - 10) % 6 else "wd0")
+for y in range(12, 40): P(9, y, "ol"); P(30, y, "ol"); P(8, y, "t0"); P(31, y, "t0")
+for y in range(14, 40, 6):                                                   # rope rail posts
+    P(7, y, "t1"); P(32, y, "t1")
+# The rocky point where you fish for driftwood (a flat slab out into the sea).
+HOOK = (206, 112)
+pt = [(x, y) for y in range(HOOK[1] - 5, HOOK[1] + 6) for x in range(HOOK[0] - 12, HOOK[0] + 13)
+      if ((x - HOOK[0]) / 12) ** 2 + ((y - HOOK[1]) / 5) ** 2 <= 1]
+for (x, y) in pt: P(x, y, "r2" if y < HOOK[1] else "r1")
+outline_region(pt)
+for y in range(HOOK[1] + 6, HOOK[1] + 10):
+    for x in range(HOOK[0] - 10, HOOK[0] + 11): P(x, y, "r0" if y < HOOK[1] + 8 else "w3")
+
+md.rectangle((0, 0, W - 1, 10), fill=M["bar"])
+md.line((0, 11, W - 1, 11), fill=M["frame"])
+bc.putpalette(flat + [0] * (768 - len(flat)))
+bc.convert("RGB").save(os.path.join(PREVIEW, "beach_preview.png"))
+
+# Walkable: rock tops and ramps; not the sea, cliff faces, or pools. The stair and point count.
+walk = [[0] * 30 for _ in range(20)]
+for cy in range(20):
+    for cx in range(30):
+        x, y = cx * 8 + 4, cy * 8 + 4
+        if y < 12: continue
+        ok = lv[y][x] >= 0 and (not face[y][x] or on_ramp(x, y)) and (cx, cy) not in pool_cells
+        if lv[y][x] == 3: ok = ok and (cx, cy) != (0, 1)
+        walk[cy][cx] = 1 if ok else 0
+for cy in range(1, 5):
+    for cx in (1, 2, 3): walk[cy][cx] = 1                                    # the stair
+for (x, y) in pt: walk[y // 8][x // 8] = 1
+beach_walk = [walk[cy][cx] for cy in range(20) for cx in range(30)]
+# Per-pixel walk mask: rock tops only. Cliff faces and any edge between two levels are walls,
+# except on the ramps; the sea and the pools are walls too. The stair and the point are open.
+pool_px = set()
+for (cx, cy, rx, ry) in POOLS:
+    for y in range(cy - ry - 2, cy + ry + 3):
+        for x in range(cx - rx - 3, cx + rx + 4):
+            if ((x - cx) / (rx + 2)) ** 2 + ((y - cy) / (ry + 2)) ** 2 <= 1.15: pool_px.add((x, y))
+pt_px = set(pt)
+for y in range(HOOK[1] - 6, HOOK[1] + 6):
+    for x in range(HOOK[0] - 13, HOOK[0] + 14): pt_px.add((x, y)) if ((x - HOOK[0]) / 13) ** 2 + ((y - HOOK[1]) / 6) ** 2 <= 1 else None
+mask = [[0] * W for _ in range(H)]
+for y in range(12, H):
+    for x in range(W):
+        if 10 <= x < 30 and y < 44:
+            mask[y][x] = 1                                   # the stair
+            continue
+        if (x, y) in pt_px:
+            mask[y][x] = 1
+            continue
+        L = lv[y][x]
+        if L < 0 or (x, y) in pool_px: continue
+        ramp = on_ramp(x, y)
+        if face[y][x] and not ramp: continue
+        edge = False
+        for dx, dy in ((-2, 0), (2, 0), (0, -2), (0, 2), (-1, -1), (1, 1), (1, -1), (-1, 1)):
+            xx, yy = x + dx, y + dy
+            if 0 <= xx < W and 12 <= yy < H and lv[yy][xx] != L and not (face[yy][xx] and ramp):
+                if not (ramp and lv[yy][xx] >= 0): edge = True
+        if edge: continue
+        mask[y][x] = 1
+# Everything you can walk to should be reachable from the stair: report the rest.
+from collections import deque
+seen = [[False] * W for _ in range(H)]
+q = deque([(20, 30)]); seen[30][20] = True
+while q:
+    x, y = q.popleft()
+    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+        xx, yy = x + dx, y + dy
+        if 0 <= xx < W and 12 <= yy < H and mask[yy][xx] and not seen[yy][xx]:
+            seen[yy][xx] = True; q.append((xx, yy))
+total = sum(mask[y][x] for y in range(H) for x in range(W))
+reach = sum(seen[y][x] for y in range(H) for x in range(W))
+print(f"coast: {reach} of {total} walkable pixels reachable from the stair")
+for y in range(H):                                       # unreachable pockets are not walkable
+    for x in range(W):
+        if mask[y][x] and not seen[y][x]: mask[y][x] = 0
+beach_mask = []
+for i in range(0, W * H, 8):
+    byte = 0
+    for b in range(8):
+        x, y = (i + b) % W, (i + b) // W
+        byte |= mask[y][x] << b
+    beach_mask.append(byte)
+mimg = Image.new("RGB", (W, H))
+for y in range(H):
+    for x in range(W):
+        mimg.putpixel((x, y), (60, 200, 90) if mask[y][x] else (0, 0, 0))
+Image.blend(bc.convert("RGB"), mimg, 0.45).resize((W * 3, H * 3), Image.NEAREST).save(os.path.join(PREVIEW, "coast_walk.png"))
+beach_pools = []
+for (cx, cy, rx, ry) in POOLS:
+    beach_pools += [cx, cy + ry + 2]
+
+# Beach forage sprites (16x16). Colors 3/4 come from each item's palette bank.
+scallop = grid_image(pad16(["................", "................", "......1111......", "....11434311....",
+                            "...1434343431...", "..143434343431..", "..134343434341..", "..143434343431..",
+                            "...1434343431...", "....11444411....", ".....1cccc1.....", "......1111......",
+                            "....88888888....", "................"], 16))
+glass = grid_image(pad16(["................", "................", "................", "......11........",
+                          ".....1441.......", "....143341......", "...1433331......", "...14333341.....",
+                          "....1333331.....", ".....13331......", "......111.......", "....8888888.....",
+                          "................"], 16))
+coral = grid_image(pad16(["................", "....1....1......", "...141..141..1..", "...131.1431.141.",
+                          "....1314331.131.", "..1.13333311.31.", ".141.1333331131.", ".1331.13333331..",
+                          "..1333333331....", "....1333331.....", ".....13331......", "....1111111.....",
+                          "...888888888....", "................"], 16))
+crystal = grid_image(pad16(["................", "................", ".......11.......", "......1441......",
+                            ".....143341.....", "....14333341....", "....13333331....", "....13333331....",
+                            ".....133331.....", "......1331......", ".......11.......", ".....888888.....",
+                            "................"], 16))
+driftwood = grid_image(pad16(["................", "................", "................", "................",
+                              "..11111111111...", ".1777777777771..", "1767777776777611", "1677777767777761",
+                              ".1666666666661..", "..11111111111...", ".88888888888888.", "................"], 16))
+beach_words = []
+for im in (scallop, glass, coral, crystal, driftwood):
+    beach_words += tiles_4bpp(im, 2, 2)
+# Item palettes (banks 2..10): pink, white, cyan, green, blue, red, orange, gold, yellow.
+BEACH_COLORS = [((236, 120, 170), (255, 190, 220)), ((230, 230, 236), (255, 255, 255)), ((60, 200, 220), (160, 240, 250)),
+                ((60, 170, 90), (140, 230, 150)), ((60, 110, 220), (140, 180, 255)), ((210, 50, 50), (250, 130, 120)),
+                ((236, 130, 40), (255, 190, 110)), ((220, 170, 50), (255, 220, 120)), ((240, 220, 70), (255, 245, 170))]
+beach_pals = []
+for gem, light in BEACH_COLORS:
+    pal_ = list(NATURE_PAL)
+    pal_[3], pal_[4] = gem, light
+    beach_pals += [rgb15_early(c) for c in pal_]
+
 # ---- write art.c / art.h ----------------------------------------------------------
 
 
@@ -1270,6 +1546,15 @@ arr("u16", "flower_pals", flower_pals)   # 6 banks of 16: red, blue, yellow, vio
 arr("u8", "mine_bg", list(mn.get_flattened_data() if hasattr(mn, "get_flattened_data") else mn.getdata()), 48, align=True)
 arr("u32", "mine_tiles", [f"0x{w:08X}" for w in mine_words], 8)   # rock, hard rock, ore, hole, pickaxe, sparkle
 arr("u16", "ore_pals", ore_pals)   # 7 banks: sulfur, red, blue, green, cyan, violet, silver
+arr("u8", "beach_bg", list(bc.get_flattened_data() if hasattr(bc, "get_flattened_data") else bc.getdata()), 48, align=True)
+arr("u8", "beach_walk", beach_walk, 30)   # 30x20 cells of 8x8: 1 = walkable
+arr("u8", "beach_mask", beach_mask, 30)   # one bit per pixel, row by row: 1 = walkable
+arr("u8", "beach_pools", beach_pools, 12)   # each pool: center x, ground y below it
+hdr.append(f"#define BEACH_POOLS {len(beach_pools) // 2}")
+hdr.append(f"#define HOOK_SPOT_X {HOOK[0]}")
+hdr.append(f"#define HOOK_SPOT_Y {HOOK[1] - 2}")
+arr("u32", "beach_tiles", [f"0x{w:08X}" for w in beach_words], 8)   # scallop, glass, coral, crystal, driftwood
+arr("u16", "beach_pals", beach_pals)   # 9 banks: pink, white, cyan, green, blue, red, orange, gold, yellow
 open(OUT_C, "w").write("\n".join(src) + "\n")
 open(OUT_H, "w").write("\n".join(hdr) + "\n")
 print(f"art: shop palette {len(pal)} colors, {len(cust_words) // 8} customer tiles, {len(FONT_CHARS)} glyphs")

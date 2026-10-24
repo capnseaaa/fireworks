@@ -1,6 +1,8 @@
 // Walk-around gathering, in the spirit of Stardew Valley. The forest: trees to chop,
 // bushes to search, sparkling flowers and debris that come back each day, and the kiln.
 // The mine: floors of rocks to break, one hiding the ladder down, with richer ore deeper.
+// The coast: terraces of rock full of tide pools; shells, sea glass, coral, and amber wash
+// up on the rocks, and driftwood floats past the rocky point.
 // Walking is free; every action costs a few minutes of daylight.
 #include "game.h"
 #include "art.h"
@@ -12,6 +14,7 @@ enum { NT_OAK = 0, NT_BIG = 16, NT_STUMP = 80, NT_BUSH = 84, NT_BARE = 88, NT_KI
        NT_STONE = 112, NT_WEEDS = 116, NT_AXE = 120, NT_FLOWER = 124, NT_SPARK = 128 };
 // In the mine the same tile slots hold the mine sprites instead.
 enum { MT_ROCK = 0, MT_HARD = 4, MT_ORE = 8, MT_HOLE = 12, MT_PICK = 16, MT_SPARK = 20 };
+enum { BT_SCALLOP = 0, BT_GLASS = 4, BT_CORAL = 8, BT_CRYSTAL = 12, BT_DRIFT = 16, BT_SPARK = 20 };
 
 u8 gear[GEAR_COUNT];
 int bag_used;                          // items picked up today (the bag holds bag_size())
@@ -19,7 +22,7 @@ int bag_used;                          // items picked up today (the bag holds b
 int bag_size(void) { return 10 + 10 * gear[GEAR_BAG]; }   // 20, 30, 40
 
 enum { N_OAK, N_BIG, N_STUMP, N_BIGSTUMP, N_BUSH, N_BARE, N_KILN, N_TWIG, N_STONE, N_WEEDS, N_FLOWER, N_GONE,
-       N_ROCK, N_HARD, N_ORE, N_HOLE, N_UP };
+       N_ROCK, N_HARD, N_ORE, N_HOLE, N_UP, N_FORAGE, N_DRIFT, N_POOL, N_DOCK };
 typedef struct { u8 type, x, y, hp, color; } Node;   // x, y = where it meets the ground
 
 #define MAXNODES 32
@@ -27,6 +30,13 @@ static Node nodes[MAXNODES];
 static int nnodes;
 static Node forest[MAXNODES];          // the forest keeps its state all day
 static int nforest, forest_day = -1, kiln_used, geodes_day = -1;
+static Node beach[MAXNODES];           // so does the beach
+static int nbeach, beach_day = -1, hook_day = -1;
+
+// Beach finds by palette bank: pink, white, cyan, green, blue, red, orange, gold, yellow.
+static const u8 find_hue[9] = { H_PINK, H_WHITE, H_CYAN, H_GREEN, H_BLUE, H_RED, H_ORANGE, H_GOLD, H_YELLOW };
+static const char* const find_name[9] = { "SCALLOP", "WHITE SHELL", "SEA GLASS", "SEA GLASS", "SEA GLASS", "CORAL", "CORAL", "AMBER", "SALT CRYSTAL" };
+static int find_tile(int c) { return c < 2 ? BT_SCALLOP : c < 5 ? BT_GLASS : c < 7 ? BT_CORAL : BT_CRYSTAL; }
 
 int field_area;                        // FIELD_FOREST, FIELD_MINE, FIELD_GEODES
 int mine_floor, mine_deepest;          // the floor you are on; the deepest you have reached
@@ -45,14 +55,18 @@ static char note[96];                       // a short message at the bottom (2 
 static int note_t;
 static char pops[4][24];                    // "+2 SHELLS" popping up over the spot
 static s16 pop_x[4], pop_y[4], pop_t[4];
-enum { F_WALK, F_KILN, F_GEODE };
+enum { F_WALK, F_KILN, F_GEODE, F_HOOK };
 static int fstate;
 static int heat, zone, zone_v, score, kiln_t;   // the kiln minigame
 static int geode_n, geode_pos, geode_v, geode_wait;   // the geode minigame
+static int hook_casts, hook_t, hook_got, hook_bottle; // the driftwood minigame
+static s16 log_x[3], log_v[3];
+static u8 log_kind[3];                                 // 0 none, 1 log, 2 bottle
 static char geode_res[3][24];
 
 static void leave_mine(void);
 static void geode_start(void);
+static void hook_start(void);
 
 static void add_node(int type, int x, int y, int hp) {
     if (nnodes >= MAXNODES) return;
@@ -136,12 +150,35 @@ static void make_floor(int f) {
         }
 }
 
+// The coast: the pools and the rocky point stay put; finds wash up fresh each day.
+static void make_beach(void) {
+    nnodes = 0;
+    for (int i = 0; i < BEACH_POOLS; i++) add_node(N_POOL, beach_pools[i * 2], beach_pools[i * 2 + 1], 1);
+    add_node(N_DOCK, HOOK_SPOT_X, HOOK_SPOT_Y, 0);            // the rocky point
+    int finds = 8 + rnd() % 3, wood = 2 + rnd() % 2;
+    for (int tries = 0; tries < 400 && (finds > 0 || wood > 0); tries++) {
+        int x = 8 + rnd() % 224, y = 44 + rnd() % 100;
+        if (x < 40 && y < 48) continue;                        // the stair
+        if (!beach_walk[(y >> 3) * 30 + (x >> 3)] || !beach_walk[((y - 6) >> 3) * 30 + (x >> 3)]) continue;
+        int ok = 1;
+        for (int i = 0; i < nnodes && ok; i++) {
+            int dx = nodes[i].x - x, dy = nodes[i].y - y;
+            if (dx * dx + dy * dy < 20 * 20) ok = 0;
+        }
+        if (!ok) continue;
+        if (finds > 0) { add_node(N_FORAGE, x, y, 0); nodes[nnodes - 1].color = rnd() % 9; finds--; }
+        else { add_node(N_DRIFT, x, y, 0); wood--; }
+    }
+}
+
 // Each kind's solid footprint (half width, height above the ground point).
 static void footprint(const Node* n, int* hw, int* hh) {
     switch (n->type) {
     case N_OAK: case N_STUMP: *hw = 6; *hh = 6; break;
     case N_BIG: case N_BIGSTUMP: *hw = 12; *hh = 8; break;
     case N_HOLE: *hw = 0; *hh = 0; break;               // walk over the hole
+    case N_POOL: *hw = 12; *hh = 14; break;
+    case N_DOCK: *hw = 0; *hh = 0; break;
     case N_UP: *hw = 8; *hh = 6; break;
     case N_KILN: *hw = 12; *hh = 8; break;
     case N_GONE: *hw = 0; *hh = 0; break;
@@ -152,6 +189,13 @@ static void footprint(const Node* n, int* hw, int* hh) {
 static int blocked(int x, int y) {
     if (field_area == FIELD_MINE) {
         if (x < 24 || x > 216 || y < 58 || y > 152) return 1;
+    } else if (field_area == FIELD_BEACH) {
+        if (x < 4 || x > 235 || y < 16 || y > 155) return 1;
+        // The picture's walk mask: cliff faces, level edges, the sea, and pools are walls.
+        for (int dx = -3; dx <= 3; dx += 3) {
+            int xx = x + dx, i = y * 240 + xx;
+            if (!((beach_mask[i >> 3] >> (i & 7)) & 1)) return 1;
+        }
     } else {
         if (x < 22 || x > 218 || y < 44) return 1;
         if (y > 154 && (x < 106 || x > 134)) return 1;
@@ -297,6 +341,55 @@ static void act(int i) {
         break;
     case N_UP:
         leave_mine();
+        break;
+    case N_FORAGE:
+        if (bag_full()) return;
+        spend(5);
+        n->type = N_GONE;
+        if (take(1)) {
+            stock[find_hue[n->color]]++;
+            char buf[24], *p = cat(buf, "+1 ");
+            cat(p, hue_names[find_hue[n->color]]);
+            pop(x, y + 10, buf);
+            say_note(find_name[n->color]);
+        }
+        break;
+    case N_DRIFT:
+        if (bag_full()) return;
+        spend(5);
+        n->type = N_GONE;
+        { int got = take(1 + (rnd() & 1)); shells += got; pop_items(x, y + 10, got, got == 1 ? "SHELL" : "SHELLS"); }
+        break;
+    case N_POOL:
+        if (!(tools & TOOL_NET)) { say_note("THINGS GLINT IN THE POOL. A NET WOULD REACH THEM."); return; }
+        if (!n->hp) { say_note("THIS POOL IS EMPTY UNTIL THE NEXT TIDE."); return; }
+        if (bag_full()) return;
+        spend(10);
+        n->hp = 0;
+        {
+            static const u8 pool_hues[3] = { H_PINK, H_CYAN, H_BLUE };
+            int h = pool_hues[rnd() % 3];
+            int got = take(1 + (rnd() & 1));
+            stock[h] += got;
+            char buf[24], *p = cat(buf, "+");
+            p = cat_num(p, got);
+            p = cat(p, " ");
+            cat(p, hue_names[h]);
+            pop(x, y - 10, buf);
+            if (rnd() % 100 < 25) {
+                int pat = unlock_pattern();
+                if (pat >= 0) {
+                    char m[80], *q = cat(m, "A BOTTLE WITH A SCROLL! NOW I CAN MAKE ");
+                    q = cat(q, pat_plural[pat]);
+                    cat(q, ".");
+                    say_note(m);
+                }
+            }
+        }
+        break;
+    case N_DOCK:
+        if (hook_day == night) { say_note("ENOUGH FISHING FOR DRIFTWOOD TODAY."); return; }
+        hook_start();
         break;
     case N_BARE:
         say_note("NOTHING LEFT ON THIS BUSH TODAY.");
@@ -456,6 +549,80 @@ static void draw_geode(u8* back) {
     }
 }
 
+// --- driftwood: drop the hook as the logs float past ---------------------------------
+
+#define HOOK_X 120
+#define HOOK_CASTS 6
+
+static void hook_start(void) {
+    fstate = F_HOOK;
+    hook_casts = HOOK_CASTS; hook_t = 0; hook_got = 0; hook_bottle = 0;
+    for (int k = 0; k < 3; k++) { log_kind[k] = 0; log_x[k] = -40 - k * 70; }
+}
+
+static void hook_step(void) {
+    for (int k = 0; k < 3; k++) {                         // logs drift by, left to right
+        if (!log_kind[k]) {
+            if (rnd() % 60 == 0) { log_kind[k] = rnd() % 8 == 0 ? 2 : 1; log_x[k] = 28; log_v[k] = 1 + rnd() % 2; }
+            continue;
+        }
+        log_x[k] += log_v[k];
+        if (log_x[k] > 212) log_kind[k] = 0;
+    }
+    if (hook_t) {
+        if (--hook_t == 0 && hook_casts == 0) {           // the last cast is back
+            int got = take(hook_got);
+            shells += got;
+            spend(30);
+            hook_day = night;
+            fstate = F_WALK;
+            char buf[80], *p = cat(buf, "CAUGHT ");
+            p = cat_num(p, got);
+            p = cat(p, got == 1 ? " PIECE OF DRIFTWOOD: +" : " PIECES OF DRIFTWOOD: +");
+            p = cat_num(p, got);
+            p = cat(p, got == 1 ? " SHELL." : " SHELLS.");
+            if (hook_bottle) {
+                int pat = unlock_pattern();
+                if (pat >= 0) { p = cat(p, " AND A BOTTLE: "); p = cat(p, pat_plural[pat]); cat(p, "!"); }
+            }
+            say_note(buf);
+        }
+        return;
+    }
+    if ((hit & KEY_A) && hook_casts) {                    // drop the hook
+        hook_casts--;
+        hook_t = 20;
+        for (int k = 0; k < 3; k++)
+            if (log_kind[k] && log_x[k] > HOOK_X - 12 && log_x[k] < HOOK_X + 4) {
+                if (log_kind[k] == 2) hook_bottle = 1;
+                else hook_got++;
+                log_kind[k] = 0;
+                break;
+            }
+    }
+}
+
+static void draw_hook(u8* back) {
+    box(back, 16, 20, 208, 104);
+    text(back, 26, 26, "CATCH DRIFTWOOD", UI_YELLOW);
+    text(back, 26, 36, "PRESS A TO DROP THE HOOK ON A LOG.", UI_WHITE);
+    char buf[32], *p = cat(buf, "CASTS LEFT ");
+    p = cat_num(p, hook_casts);
+    p = cat(p, "   CAUGHT ");
+    cat_num(p, hook_got + hook_bottle);
+    text(back, 26, 46, buf, UI_WHITE);
+    fill_rect(back, 24, 74, 192, 40, UI_INK);             // the water
+    for (int x = 24; x < 216; x += 12) fill_rect(back, x + ((frame >> 3) % 12), 80 + (x / 12 % 3) * 10, 4, 1, UI_GRAY);
+    for (int k = 0; k < 3; k++) {
+        if (!log_kind[k]) continue;
+        if (log_kind[k] == 1) { fill_rect(back, log_x[k], 90, 16, 6, UI_GOLD_DK); fill_rect(back, log_x[k], 90, 16, 2, UI_GOLD); }
+        else { fill_rect(back, log_x[k] + 4, 86, 6, 10, UI_GREEN); fill_rect(back, log_x[k] + 6, 83, 2, 3, UI_GOLD_DK); }
+    }
+    int depth = hook_t ? (hook_t > 10 ? 20 - hook_t : hook_t) * 3 : 0;   // down and back up
+    fill_rect(back, HOOK_X, 60, 1, 18 + depth, UI_WHITE);
+    fill_rect(back, HOOK_X - 2, 76 + depth, 5, 3, UI_YELLOW);
+}
+
 // --- scene ---------------------------------------------------------------------------
 
 // Deeper floors get darker; the BG palette is the map's, dimmed.
@@ -505,6 +672,15 @@ void field_enter(void) {
         for (int i = 0; i < nnodes; i++) nodes[i] = forest[i];
         px = 120; py = 150; face = 1;
         say_note("THE FOREST. (A: CHOP, PICK, SEARCH. WALK DOWN THE PATH TO LEAVE.)");
+    } else if (field_area == FIELD_BEACH) {
+        for (int i = 0; i < BT_SPARK * 8; i++) t[T_NATURE * 8 + i] = beach_tiles[i];
+        for (int i = 0; i < 8; i++) t[(T_NATURE + BT_SPARK) * 8 + i] = nature_tiles[NT_SPARK * 8 + i];
+        for (int i = 0; i < 9 * 16; i++) OBJ_PAL[32 + i] = beach_pals[i];
+        if (beach_day != night) { make_beach(); beach_day = night; nbeach = nnodes; for (int i = 0; i < nnodes; i++) beach[i] = nodes[i]; }
+        nnodes = nbeach;
+        for (int i = 0; i < nnodes; i++) nodes[i] = beach[i];
+        px = 20; py = 40; face = 0;
+        say_note("THE TIDE POOLS. (A: PICK UP FINDS, DIP INTO POOLS WITH A NET. FISH FROM THE ROCKY POINT.)");
     } else {
         for (int i = 0; i < (MT_SPARK + 1) * 8; i++) t[T_NATURE * 8 + i] = mine_tiles[i];
         for (int i = 0; i < 7 * 16; i++) OBJ_PAL[32 + i] = ore_pals[i];
@@ -518,6 +694,7 @@ void field_enter(void) {
 
 static void leave(void) {
     if (field_area == FIELD_FOREST) { nforest = nnodes; for (int i = 0; i < nnodes; i++) forest[i] = nodes[i]; }
+    if (field_area == FIELD_BEACH) { nbeach = nnodes; for (int i = 0; i < nnodes; i++) beach[i] = nodes[i]; }
     day_return();
 }
 
@@ -542,6 +719,7 @@ static void descend(void) {
 void field_update(u8* back) {
     if (fstate == F_KILN) kiln_step();
     else if (fstate == F_GEODE) geode_step();
+    else if (fstate == F_HOOK) hook_step();
     else if (field_area == FIELD_GEODES) {
         if (hit & (KEY_A | KEY_B)) { leave(); return; }
     } else if (swing) {
@@ -560,6 +738,7 @@ void field_update(u8* back) {
         }
         if (moving) step_t++;
         if (py > 156) { leave(); return; }
+        if (field_area == FIELD_BEACH && py < 20 && px < 34) { leave(); return; }   // up the stair
         if (field_area == FIELD_MINE)                    // step onto an open ladder hole
             for (int i = 0; i < nnodes; i++)
                 if (nodes[i].type == N_HOLE && px > nodes[i].x - 6 && px < nodes[i].x + 6 && py > nodes[i].y - 8 && py < nodes[i].y + 2)
@@ -568,16 +747,17 @@ void field_update(u8* back) {
             int i = facing_node();
             if (i >= 0) act(i);
         }
-        if (hit & KEY_B && field_area == FIELD_FOREST) { leave(); return; }
+        if (hit & KEY_B && field_area != FIELD_MINE) { leave(); return; }
     }
     if (day_min >= DAY_END_MIN) { day_min = DAY_END_MIN; leave(); return; }
     if (note_t) note_t--;
 
-    copy_page(back, field_area == FIELD_FOREST ? forest_bg : mine_bg);
+    copy_page(back, field_area == FIELD_FOREST ? forest_bg : field_area == FIELD_BEACH ? beach_bg : mine_bg);
     // Status bar.
     char buf[48], *p = day_clock(buf, day_min);
     text(back, 3, 2, buf, UI_YELLOW);
     if (field_area == FIELD_FOREST) text(back, 100, 2, "FOREST", UI_WHITE);
+    else if (field_area == FIELD_BEACH) text(back, 85, 2, "TIDE POOLS", UI_WHITE);
     else {
         p = cat(buf, "MINE ");
         cat_num(p, mine_floor);
@@ -598,6 +778,7 @@ void field_update(u8* back) {
     int wx0 = 0, wy0 = 0, wx1 = 0, wy1 = 0;
     if (fstate == F_KILN) { draw_kiln(back); wx0 = 20; wy0 = 30; wx1 = 220; wy1 = 110; }
     else if (fstate == F_GEODE) { draw_geode(back); wx0 = 16; wy0 = 24; wx1 = 224; wy1 = 124; }
+    else if (fstate == F_HOOK) { draw_hook(back); wx0 = 16; wy0 = 20; wx1 = 224; wy1 = 124; }
     else if (note_t) {
         char lines[2][41];
         int n = wrap(note, 37, lines, 2);
@@ -637,6 +818,22 @@ void field_update(u8* back) {
             continue;
         }
         const Node* nd = &nodes[i];
+        if (field_area == FIELD_BEACH) {
+            switch (nd->type) {
+            case N_FORAGE:
+                if ((frame + i * 13) % 90 < 12) sprite(nd->x + 2, nd->y - 16, T_NATURE + BT_SPARK, 0, 0, 1);
+                sprite(nd->x - 8, nd->y - 12, T_NATURE + find_tile(nd->color), 0, 1, 2 + nd->color);
+                break;
+            case N_DRIFT: sprite(nd->x - 8, nd->y - 11, T_NATURE + BT_DRIFT, 0, 1, 1); break;
+            case N_POOL:                                   // the pool itself is in the picture
+                if (nd->hp && (frame + i * 29) % 70 < 14) sprite(nd->x - 2, nd->y - 12, T_NATURE + BT_SPARK, 0, 0, 1);
+                break;
+            case N_DOCK:
+                if (hook_day != night && (frame & 32)) sprite(nd->x - 3, nd->y - 4, T_NATURE + BT_SPARK, 0, 0, 1);
+                break;
+            }
+            continue;
+        }
         if (field_area != FIELD_FOREST) {
             switch (nd->type) {
             case N_ROCK: sprite(nd->x - 8, nd->y - 12, T_NATURE + MT_ROCK, 0, 1, 1); break;

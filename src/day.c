@@ -23,7 +23,7 @@ static const Area areas[A_COUNT] = {
 };
 
 // What you can do at each spot. kind picks the result in do_spot().
-enum { K_OPEN, K_UPGRADE, K_EXPLORE, K_MINE, K_GEODES, K_SAND, K_DRIFT, K_POOLS,
+enum { K_OPEN, K_UPGRADE, K_EXPLORE, K_MINE, K_GEODES, K_BEACH,
        K_CLIMB, K_RUINS, K_BUY_POWDER, K_BUY_SHELLS, K_BUY_STAR, K_BUY_PICK, K_BUY_NET, K_BUY_ROPE, K_BUY_AXE, K_BUY_BAG, K_BUY_LANTERN };
 typedef struct { u8 area, kind, minutes, needs, price; const char* name; const char* desc; } Spot;
 static const Spot spots[] = {
@@ -32,9 +32,7 @@ static const Spot spots[] = {
     { A_FOREST, K_EXPLORE, 0, 0, 0, "EXPLORE", "WALK THE WOODS: CHOP TREES, PICK FLOWERS, SEARCH BUSHES, BURN CHARCOAL." },
     { A_MINE, K_MINE, 0, 0, 0, "ENTER THE MINE", "BREAK ROCKS FOR ORE. ONE ROCK ON EACH FLOOR HIDES THE LADDER DOWN." },
     { A_MINE, K_GEODES, 30, 0, 0, "CRACK GEODES", "THREE GEODES A DAY. STOP THE POINTER ON THE CRACK." },
-    { A_BEACH, K_SAND, 45, 0, 0, "COMB THE SAND", "SALT AND SEA GLASS: YELLOW, ORANGE, GOLD." },
-    { A_BEACH, K_DRIFT, 45, 0, 0, "DRIFTWOOD", "WASHED-UP WOOD FOR SHELLS." },
-    { A_BEACH, K_POOLS, 60, TOOL_NET, 0, "TIDE POOLS", "PINK AND CYAN SHELLS, BOTTLES. NEEDS A NET." },
+    { A_BEACH, K_BEACH, 0, 0, 0, "EXPLORE", "ROCKS FULL OF TIDE POOLS: SHELLS, SEA GLASS, CORAL, AMBER. A NET REACHES INTO THE POOLS." },
     { A_QUARRY, K_CLIMB, 90, TOOL_ROPE, 0, "CLIMB DOWN", "WHITE AND SILVER STONE. NEEDS A ROPE." },
     { A_QUARRY, K_RUINS, 60, TOOL_ROPE, 0, "OLD WORKSHOP", "A RUINED FIREWORK WORKSHOP. NEEDS A ROPE." },
     { A_MARKET, K_BUY_POWDER, 10, 0, 12, "3 POWDER", "THREE SCOOPS OF BLACK POWDER." },
@@ -42,7 +40,7 @@ static const Spot spots[] = {
     { A_MARKET, K_BUY_STAR, 10, 0, 8, "1 STAR", "ONE COLORED STAR. PICK THE COLOR." },
     { A_MARKET, K_BUY_PICK, 10, 0, 0, "PICKAXE", "BREAKS ROCKS IN THE MINE. BETTER ONES BREAK HARD ROCK FASTER." },
     { A_MARKET, K_BUY_LANTERN, 10, 0, 0, "LANTERN", "LIGHTS THE MINE BELOW FLOOR 4." },
-    { A_MARKET, K_BUY_NET, 10, 0, 50, "NET", "OPENS THE BEACH'S TIDE POOLS." },
+    { A_MARKET, K_BUY_NET, 10, 0, 50, "NET", "REACHES INTO THE BEACH'S TIDE POOLS." },
     { A_MARKET, K_BUY_ROPE, 10, 0, 80, "ROPE", "OPENS THE QUARRY." },
     { A_MARKET, K_BUY_AXE, 10, 0, 0, "AXE", "A SHARPER AXE: FEWER SWINGS, AND IT FELLS THE OLD TREE." },
     { A_MARKET, K_BUY_BAG, 10, 0, 0, "BAG", "A BIGGER BAG: CARRY MORE HOME EACH DAY." },
@@ -109,7 +107,7 @@ static const char* blocked(int i) {
     const Spot* s = &spots[i];
     if (s->kind == K_OPEN || s->kind == K_UPGRADE) return 0;
     if (s->kind == K_EXPLORE) return day_min >= DAY_END ? "NOT ENOUGH DAYLIGHT" : 0;
-    if (s->kind == K_MINE) return day_min >= DAY_END ? "NOT ENOUGH DAYLIGHT" : 0;
+    if (s->kind == K_MINE || s->kind == K_BEACH) return day_min >= DAY_END ? "NOT ENOUGH DAYLIGHT" : 0;
     if ((s->kind == K_BUY_AXE || s->kind == K_BUY_BAG || s->kind == K_BUY_PICK || s->kind == K_BUY_LANTERN) && !price_of(i))
         return "YOU HAVE THE BEST ONE";
     if (s->kind == K_GEODES && geodes_done()) return "DONE FOR TODAY";
@@ -157,26 +155,9 @@ static char* maybe_scroll(char* p, int chance) {
 }
 
 static void do_spot(int i) {
-    static const u8 warm[] = { H_YELLOW, H_ORANGE, H_GOLD }, pools[] = { H_PINK, H_CYAN, H_BLUE };
     static const u8 pale[] = { H_WHITE, H_SILVER }, odd[] = { H_PINK, H_VIOLET, H_SILVER };
     char* p = cat(msg, "YOU GOT ");
-    int n;
     switch (spots[i].kind) {
-    case K_SAND:
-        p = add_stars(p, warm, 3, 2);
-        cat(p, ".");
-        break;
-    case K_DRIFT:
-        n = 1 + (rnd() & 1);
-        shells += n;
-        p = cat_num(p, n);
-        cat(p, n == 1 ? " SHELL." : " SHELLS.");
-        break;
-    case K_POOLS:
-        p = add_stars(p, pools, 3, 1 + (rnd() & 1));
-        p = cat(p, ".");
-        maybe_scroll(p, 25);
-        break;
     case K_CLIMB:
         p = add_stars(p, pale, 2, 2);
         p = cat(p, ".");
@@ -307,6 +288,7 @@ static void step(void) {
         if (spots[i].kind == K_UPGRADE) { go(DS_UPGRADE); cursor = 0; break; }
         if (spots[i].kind == K_EXPLORE) { field_go(FIELD_FOREST); break; }
         if (spots[i].kind == K_MINE) { field_go(FIELD_MINE); break; }
+        if (spots[i].kind == K_BEACH) { field_go(FIELD_BEACH); break; }
         if (spots[i].kind == K_GEODES) { field_go(FIELD_GEODES); break; }
         if (spots[i].kind == K_BUY_STAR) { go(DS_COLOR); cursor = 0; break; }
         work_spot = i;

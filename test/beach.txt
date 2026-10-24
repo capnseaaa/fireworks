@@ -1,0 +1,87 @@
+# Dev mode -> all gear -> new day -> the tide pools.
+# Dev mode -> all gear -> new day -> the mine. (Phase 1: dump floor 1's rocks.)
+40 0 v_title.ppm
+1 768
+1 770
+1 768
+1 0
+10 0 v_dev.ppm
+1 128
+1 0
+1 128
+1 0
+1 128
+1 0
+1 1
+1 0
+1 128
+1 0
+1 128
+1 0
+1 1
+1 0
+20 0
+1 1
+1 0
+5 0
+1 16
+1 0
+5 0
+1 1
+1 0
+5 0
+1 1
+1 0
+30 0 b_enter.ppm
+1 0 @$scene,$field_area,$nnodes,$px,$py
+40 128
+1 0 b_walk.ppm
+1 0 @$px,$py
+1 0 !$px=178,$py=63,$face=1
+2 0
+1 1
+1 0
+20 0
+1 0 !$px=32,$py=73,$face=1
+2 0
+1 1
+1 0
+20 0
+1 0 b_finds.ppm
+1 0 @$bag_used,$day_min
+1 0 !$px=66,$py=70,$face=1
+2 0
+1 1
+1 0
+20 0 b_pool.ppm
+1 0 @$bag_used,$day_min
+1 0 !$px=192,$py=110,$face=3
+2 0
+1 1
+1 0
+30 0 b_hook0.ppm
+1 1
+1 0
+40 0
+1 1
+1 0
+40 0
+1 1
+1 0
+40 0
+1 1
+1 0
+40 0
+1 1
+1 0
+40 0
+1 1
+1 0
+40 0
+60 0 b_hookdone.ppm
+1 0 @$shells,$hook_day
+1 0 !$px=20,$py=30,$face=1
+2 0
+20 64
+1 0 @$scene,$day_st
+20 0 b_back.ppm

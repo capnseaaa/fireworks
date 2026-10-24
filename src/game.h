@@ -77,7 +77,7 @@ enum { GEAR_AXE, GEAR_BAG, GEAR_PICK, GEAR_LANTERN, GEAR_COUNT };   // tiers; pi
 extern u8 gear[GEAR_COUNT];       // tier 1..3
 extern int bag_used;              // items picked up today
 int bag_size(void);
-enum { FIELD_FOREST, FIELD_MINE, FIELD_GEODES };
+enum { FIELD_FOREST, FIELD_MINE, FIELD_GEODES, FIELD_BEACH };
 #define MINE_FLOORS 10
 #define MINE_DARK 5                // floors from here down need a lantern
 extern int mine_floor, mine_deepest;

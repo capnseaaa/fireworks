@@ -1,0 +1,71 @@
+# Walk down from the top terrace: cliffs stop you, ramps let you through.
+# Walk down from the top terrace: cliffs stop you, ramps let you through.
+# Dev mode -> all gear -> new day -> the tide pools.
+# Dev mode -> all gear -> new day -> the mine. (Phase 1: dump floor 1's rocks.)
+40 0 v_title.ppm
+1 768
+1 770
+1 768
+1 0
+10 0 v_dev.ppm
+1 128
+1 0
+1 128
+1 0
+1 128
+1 0
+1 1
+1 0
+1 128
+1 0
+1 128
+1 0
+1 1
+1 0
+20 0
+1 1
+1 0
+5 0
+1 16
+1 0
+5 0
+1 1
+1 0
+5 0
+1 1
+1 0
+30 0 b_enter.ppm
+1 0 @$scene,$field_area,$nnodes,$px,$py
+1 0 !$px=50,$py=40,$face=0
+2 0
+120 128
+1 0 @$px,$py
+1 0 !$px=60,$py=41,$face=0
+2 0
+120 128
+1 0 @$px,$py
+1 0 !$px=120,$py=40,$face=0
+2 0
+120 128
+1 0 @$px,$py
+1 0 !$px=140,$py=40,$face=0
+2 0
+120 128
+1 0 @$px,$py
+1 0 !$px=176,$py=40,$face=0
+2 0
+120 128
+1 0 @$px,$py
+1 0 !$px=78,$py=40,$face=0
+2 0
+120 128
+1 0 @$px,$py
+1 0 !$px=100,$py=40,$face=0
+2 0
+120 128
+1 0 @$px,$py
+1 0 !$px=158,$py=40,$face=0
+2 0
+120 128
+1 0 @$px,$py
+1 0 w_end.ppm
