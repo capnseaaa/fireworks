@@ -57,6 +57,7 @@ static int work_spot, work_from;
 static u32 used;                       // spots done today (bit per spot)
 static char msg[160];
 static u32 page_sig[2];
+static int menu_x0 = 240, menu_y1;     // the open menu box (the player marker hides under it)
 static int upg_result;                 // the result came from buying an upgrade
 
 // Why an upgrade cannot be bought now, or 0.
@@ -367,6 +368,7 @@ static void menu_box(u8* back, int n, const char* const* items, const u8* ok, in
     for (int i = 0; i < n; i++) if (text_w(items[i]) > w) w = text_w(items[i]);
     w += 22;
     int h = n * 9 + 10, x = 236 - w, y = 14;
+    menu_x0 = x; menu_y1 = y + h;
     box(back, x, y, w, h);
     for (int i = 0; i < n; i++) {
         text(back, x + 13, y + 6 + i * 9, items[i], !ok[i] ? UI_GRAY : i == cur ? UI_YELLOW : UI_WHITE);
@@ -417,6 +419,8 @@ static void draw_bag(u8* back) {
 }
 
 static void draw_page(u8* back) {
+    menu_x0 = 240;
+    menu_y1 = 0;
     copy_page(back, map_bg);
     char buf[64], *p;
     time_str(buf, day_min);
@@ -553,5 +557,7 @@ void day_update(u8* back) {
     // The player stands at the current area; a bouncing arrow marks the selection.
     if (day_st == DS_MAP && !bag_open)
         sprite(areas[sel].x - 8, (areas[sel].y < 40 ? 12 : areas[sel].y - 28) + ((frame >> 3) & 1), T_MAPSPR, 0, 1, 0);
-    if (!bag_open) sprite(areas[here].x - 8, areas[here].y - 8, T_MAPSPR + 4, 0, 1, 0);
+    int px = areas[here].x - 8, py = areas[here].y - 8;
+    int covered = px + 16 > menu_x0 && py < menu_y1;
+    if (!bag_open && !covered) sprite(px, py, T_MAPSPR + 4, 0, 1, 0);
 }

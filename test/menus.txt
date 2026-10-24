@@ -1,0 +1,52 @@
+# Every frame through the firework menus, to catch the box glitch.
+40 0 n_title.ppm
+1 1
+20 0
+1 8
+1 0
+40 0
+1 1
+1 0
+1 1
+1 0
+70 0
+1 1
+1 0
+1 1
+1 0
+5 0
+1 1
+1 0 g00.ppm
+1 0 g01.ppm
+1 0 g02.ppm
+1 0 g03.ppm
+1 1
+1 0 g04.ppm
+1 0 g05.ppm
+1 0 g06.ppm
+1 0 g07.ppm
+1 1
+1 0 g08.ppm
+1 0 g09.ppm
+1 0 g10.ppm
+1 0 g11.ppm
+1 2
+1 0 g12.ppm
+1 0 g13.ppm
+1 0 g14.ppm
+1 0 g15.ppm
+1 2
+1 0 g16.ppm
+1 0 g17.ppm
+1 0 g18.ppm
+1 0 g19.ppm
+1 128
+1 0 g20.ppm
+1 0 g21.ppm
+1 0 g22.ppm
+1 0 g23.ppm
+1 1
+1 0 g24.ppm
+1 0 g25.ppm
+1 0 g26.ppm
+1 0 g27.ppm

@@ -3,6 +3,7 @@
 // gradient (HBlank interrupt). Skyline, stars, and moon are sprites.
 #include "game.h"
 #include "tables.h"
+#include "art.h"
 
 #define T_SKY   512   // 4 sprites of 64x64 (64 tiles each)
 #define T_FONT  768   // 3x5 sprite font (free play HUD)
@@ -631,7 +632,8 @@ static void draw_card(u8* back) {
     int t = rv_t;
     // The card drops in from above and settles with a small bounce.
     static const s8 drop[12] = { -126, -96, -68, -44, -24, -8, 3, 6, 4, 2, 1, 0 };
-    int cx = 30, cy = 18 + (t < 12 ? drop[t] : 0), cw = 180, chh = 124;
+    int ng = rv_ngifts < 3 ? rv_ngifts : 3;
+    int cx = 30, cy = 14 + (t < 12 ? drop[t] : 0), cw = 180, chh = 106 + 9 * ng;
     box(back, cx, cy, cw, chh);
     hide_box(cx, cy, cw, chh);
     win_on = 1;                        // the card stays solid while the sky glows
@@ -648,6 +650,13 @@ static void draw_card(u8* back) {
         if (k < rv_stars && age >= -6) {
             int px = age < 0 ? 3 - age : 3;         // 9, 8, .. 4, then lands at 3
             glyph_big(back, STAR_X(k), sy, '#', px, UI_YELLOW);
+            if (age >= 0 && age < 10) {                 // a ring of sparkles flies out as it lands
+                int r = 8 + age * 2;
+                for (int d = 0; d < 8; d++) {
+                    int dx = sin_tab[(d * 32 + 64) & 255] * r >> 8, dy = sin_tab[d * 32] * r >> 8;
+                    fill_rect(back, STAR_X(k) + dx, sy + dy, age < 6 ? 2 : 1, age < 6 ? 2 : 1, UI_YELLOW);
+                }
+            }
         } else if (t > 14) glyph_big(back, STAR_X(k), sy, '#', 3, UI_GRAY);
     }
 
@@ -702,7 +711,7 @@ static void draw_card(u8* back) {
         }
         y += 9;
     }
-    if (t > tl + 20 && (frame & 16)) text_center(back, cy + chh - 14, "A: NEXT DAY", UI_YELLOW);
+    if (t > tl + 20 && (frame & 16)) text_center(back, y + 2, "A: NEXT DAY", UI_YELLOW);
 }
 
 static int card_done(void) {
@@ -741,7 +750,6 @@ void review_update(u8* back) {
         }
         for (int k = 0; k < rv_stars; k++)
             if (rv_t == STAR_T0 + k * STAR_GAP) {   // a star lands
-                spark_ring(STAR_X(k), 18 + 30, 14, 20, 18, 750, H_GOLD);
                 shake = 5;
                 flash = 8 + k * 2;
                 flash_hue = H_GOLD;
@@ -768,6 +776,11 @@ void review_update(u8* back) {
     clear_page(back);
     hide_n = 0;
     win_on = 0;
+    // Sparks and fireworks first; bubbles and the card sit on top of them.
+    step_draw(back);
+    for (int i = 0; i < nbursts; i++) explode(&bursts[i]);
+    nbursts = 0;
+    if (flash) flash--;
     if (rv_phase == 0) {
         text_center(back, 4, "REVIEW TIME", UI_YELLOW);
         for (int i = 0; i < ncrate; i++)
@@ -780,11 +793,6 @@ void review_update(u8* back) {
         if (ncrate && rv_t > rv_start[ncrate - 1] + 10 && (frame & 16))
             text_center(back, 150, "A: SEE THE RATING", UI_WHITE);
     } else draw_card(back);
-    // Sparks and fireworks go over everything.
-    step_draw(back);
-    for (int i = 0; i < nbursts; i++) explode(&bursts[i]);
-    nbursts = 0;
-    if (flash) flash--;
     show_sprites();
 }
 
@@ -792,18 +800,18 @@ int review_shake(void) {               // screen offset for this frame's shake
     return shake ? ((shake & 1) ? 2 : -2) : 0;
 }
 
-// --- intro: the new shopkeeper, in their own words --------------------------------
+// --- intro: Grandma hands the shop to her grandson ---------------------------------
 
 static const char* const intro_pages[] = {
-    "GRANDMA RAN THE LITTLE FIREWORK SHOP IN THIS SEASIDE TOWN FOR FORTY YEARS.",
-    "THIS SPRING SHE HANDED ME THE KEYS. \"THE TOWN NEEDS ITS FIREWORKS,\" SHE SAID. \"DON'T LET THE SKY GO DARK.\"",
-    "SO HERE'S HOW IT GOES. EACH NIGHT I OPEN THE SHOP, AND PEOPLE TELL ME WHAT THEY'D LOVE TO SEE IN THE SKY.",
-    "I BUILD EACH ONE AT THE COUNTER: A SIZE, A PATTERN, A COLOR. (D-PAD TO PICK, A TO CHOOSE, B TO GO BACK.)",
-    "FANCY ONES TAKE LONGER, AND I CLOSE AT 1 AM. I CAN'T MAKE EVERYTHING, SO I'LL CHOOSE WISELY.",
-    "AT CLOSING TIME, EVERYTHING I MADE GOES UP IN ONE BIG SHOW. AFTERWARD, EVERYONE TELLS ME WHAT THEY THOUGHT.",
-    "GRANDMA SAYS SOME FOLKS SECRETLY LOVE THINGS THEY NEVER ASK FOR. I SHOULD PAY ATTENTION.",
-    "BY DAY I'LL WALK AROUND TOWN FOR POWDER, SHELLS, AND COLORED STARS. (START OPENS MY BAG.)",
-    "OKAY. DEEP BREATH. TIME TO FLIP THE SIGN TO OPEN.",
+    "THERE YOU ARE, SWEETHEART! COME HERE, LET ME GET A GOOD LOOK AT YOU.",
+    "FORTY YEARS I'VE RUN THIS LITTLE FIREWORK SHOP. NOW IT'S YOURS. THE TOWN NEEDS ITS FIREWORKS.",
+    "EACH NIGHT, YOU OPEN UP. FOLKS COME IN AND TELL YOU WHAT THEY'D LOVE TO SEE IN THE SKY.",
+    "YOU BUILD EACH ONE AT THE COUNTER: A SIZE, A PATTERN, A COLOR. (D-PAD TO PICK, A TO CHOOSE, B TO GO BACK.)",
+    "FANCY ONES TAKE LONGER, AND YOU CLOSE AT 1 AM. YOU CAN'T MAKE EVERYTHING, SO CHOOSE WISELY.",
+    "AT CLOSING TIME, IT ALL GOES UP IN ONE BIG SHOW. AFTERWARD, EVERYONE TELLS YOU WHAT THEY THOUGHT.",
+    "A LITTLE SECRET: SOME FOLKS LOVE THINGS THEY NEVER ASK FOR. KEEP YOUR EYES OPEN, DEAR.",
+    "BY DAY, WALK AROUND TOWN FOR POWDER, SHELLS, AND COLORED STARS. (START OPENS YOUR BAG.)",
+    "NOW GO FLIP THAT SIGN TO OPEN. I'LL BE WATCHING THE SKY. DON'T LET IT GO DARK, DEAR!",
 };
 #define INTRO_N (int)(sizeof intro_pages / sizeof intro_pages[0])
 static int in_page, in_shown, in_wait;
@@ -813,14 +821,24 @@ static int in_n, in_len;
 static void intro_page(int i) {
     in_page = i;
     in_shown = 0;
-    in_n = wrap(intro_pages[i], 37, in_lines, 4);
+    in_n = wrap(intro_pages[i], 37, in_lines, 3);
     in_len = 0;
     while (intro_pages[i][in_len]) in_len++;
 }
 
+#define T_GRANDMA 816                  // one customer body (the bun), 32x64
+
 void intro_begin(void) {
     intro_page(0);
     in_wait = 40;
+    // Grandma: the bun-haired customer body in her own colors (OBJ palette bank 4).
+    vu32* t = (vu32*)OBJ_TILES;
+    for (int i = 0; i < 32 * 8; i++) t[T_GRANDMA * 8 + i] = cust_tiles[2 * 32 * 8 + i];
+    static const u16 cols[13] = {
+        0, RGB(5, 3, 5), RGB(30, 24, 19), RGB(25, 18, 13), RGB(27, 27, 28), RGB(20, 20, 22),
+        RGB(17, 9, 22), RGB(12, 6, 16), RGB(4, 3, 6), RGB(31, 16, 17), RGB(17, 9, 22), RGB(12, 6, 16), RGB(31, 31, 31),
+    };
+    for (int i = 1; i < 13; i++) OBJ_PAL[64 + i] = cols[i];
 }
 
 void intro_update(u8* back) {
@@ -839,11 +857,9 @@ void intro_update(u8* back) {
     box(back, 0, 116, 240, 44);
     win_on = 1;                        // the box stays solid while the sky glows
     win_x0 = 0; win_y0 = 116; win_x1 = 240; win_y1 = 160;
-    text_typed(back, 8, 121, in_lines, in_n, in_shown, UI_WHITE);
+    text(back, 8, 121, "GRANDMA", UI_YELLOW);
+    text_typed(back, 8, 130, in_lines, in_n, in_shown, UI_WHITE);
     if (in_shown >= in_len && (frame & 16)) fill_rect(back, 226, 150, 5, 3, UI_YELLOW);
-    char buf[8], *p = cat_num(buf, in_page + 1);
-    p = cat(p, "/");
-    cat_num(p, INTRO_N);
-    text(back, 236 - text_w(buf), 106, buf, UI_GRAY);
+    sprite(10, 116 - 64, T_GRANDMA, 2, 3, 4);
     show_sprites();
 }

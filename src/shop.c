@@ -795,6 +795,7 @@ static void draw(u8* back) {
 }
 
 static void draw_page(u8* back) {
+    if (is_menu()) build_menu();       // the list must match this frame's state, not last frame's
     copy_page(back, shop_bg);
     char buf[48], *p;
 
