@@ -66,6 +66,9 @@ void new_game(void) {
     for (int i = 0; i < UPG_COUNT; i++) upg[i] = 0;
     gear[GEAR_AXE] = 1;
     gear[GEAR_BAG] = 1;
+    gear[GEAR_PICK] = 0;
+    gear[GEAR_LANTERN] = 0;
+    mine_deepest = 1;
     ncrate = 0;
 }
 
@@ -894,7 +897,8 @@ void shop_update(u8* back) {
 // night and each day; CONTINUE picks up there.
 
 #define SRAM ((volatile u8*)0x0E000000)
-#define SAVE_MAGIC 0x46575233u          // "FWR3" (v0.6: gear)
+#define SAVE_MAGIC 0x46575234u          // "FWR4" (v0.7: pickaxe, lantern, deepest floor)
+#define SAVE_MAGIC_V3 0x46575233u       // "FWR3" (v0.6): still loads
 #define SAVE_MAGIC_V2 0x46575232u       // "FWR2" (v0.5): still loads, gear starts at tier 1
 #define SAVE_MAGIC_V1 0x46575231u       // "FWR1" (v0.4): still loads, upgrades start at 0
 __attribute__((used, aligned(4))) static const char save_tag[] = "SRAM_V113";
@@ -908,9 +912,20 @@ typedef struct {
     s32 stock[NCOLORS];
     u16 known, pad2;
     u8 upg[UPG_COUNT];
-    u8 gear[GEAR_COUNT], pad3[2];
+    u8 gear[GEAR_COUNT], deepest, pad3[3];
     u32 sum;
 } Save;
+
+typedef struct {                       // v0.6
+    u32 magic;
+    u8 phase, pad[3];
+    s32 night, coins, rep, powder, shells, tools, last_stars;
+    s32 stock[NCOLORS];
+    u16 known, pad2;
+    u8 upg[UPG_COUNT];
+    u8 gear[2], pad3[2];
+    u32 sum;
+} SaveV3;
 
 typedef struct {                       // v0.5
     u32 magic;
@@ -951,6 +966,7 @@ void save_game(int phase) {
     for (int i = 0; i < NCOLORS; i++) s.stock[i] = stock[i];
     for (int i = 0; i < UPG_COUNT; i++) s.upg[i] = upg[i];
     for (int i = 0; i < GEAR_COUNT; i++) s.gear[i] = gear[i];
+    s.deepest = mine_deepest;
     s.sum = save_sum(&s);
     for (unsigned i = 0; i < sizeof s; i++) SRAM[i] = b[i];
 }
@@ -960,7 +976,25 @@ static int read_save(Save* s) {
     u8* b = (u8*)s;
     for (unsigned i = 0; i < sizeof *s; i++) b[i] = SRAM[i];
     if (s->magic == SAVE_MAGIC) return s->sum == save_sum(s);
-    for (int i = 0; i < GEAR_COUNT; i++) s->gear[i] = 1;   // older saves: starting gear
+    // Older saves: starting gear; a pickaxe bought before v0.7 is tier 1.
+    s->gear[GEAR_AXE] = s->gear[GEAR_BAG] = 1;
+    s->gear[GEAR_PICK] = s->gear[GEAR_LANTERN] = 0;
+    s->deepest = 1;
+    if (s->magic == SAVE_MAGIC_V3) {
+        SaveV3 old;
+        u8* o = (u8*)&old;
+        for (unsigned i = 0; i < sizeof old; i++) o[i] = SRAM[i];
+        if (old.sum != checksum(&old, sizeof old)) return 0;
+        s->phase = old.phase;
+        s->night = old.night; s->coins = old.coins; s->rep = old.rep; s->powder = old.powder;
+        s->shells = old.shells; s->tools = old.tools; s->last_stars = old.last_stars; s->known = old.known;
+        for (int i = 0; i < NCOLORS; i++) s->stock[i] = old.stock[i];
+        for (int i = 0; i < UPG_COUNT; i++) s->upg[i] = old.upg[i];
+        s->gear[GEAR_AXE] = old.gear[0];
+        s->gear[GEAR_BAG] = old.gear[1];
+        if (old.tools & TOOL_PICK) s->gear[GEAR_PICK] = 1;
+        return 1;
+    }
     if (s->magic == SAVE_MAGIC_V2) {
         SaveV2 old;
         u8* o = (u8*)&old;
@@ -971,6 +1005,7 @@ static int read_save(Save* s) {
         s->shells = old.shells; s->tools = old.tools; s->last_stars = old.last_stars; s->known = old.known;
         for (int i = 0; i < NCOLORS; i++) s->stock[i] = old.stock[i];
         for (int i = 0; i < UPG_COUNT; i++) s->upg[i] = old.upg[i];
+        if (old.tools & TOOL_PICK) s->gear[GEAR_PICK] = 1;
         return 1;
     }
     if (s->magic == SAVE_MAGIC_V1) {
@@ -983,6 +1018,7 @@ static int read_save(Save* s) {
         s->shells = old.shells; s->tools = old.tools; s->last_stars = old.last_stars; s->known = old.known;
         for (int i = 0; i < NCOLORS; i++) s->stock[i] = old.stock[i];
         for (int i = 0; i < UPG_COUNT; i++) s->upg[i] = 0;   // upgrades are new in v0.5
+        if (old.tools & TOOL_PICK) s->gear[GEAR_PICK] = 1;
         return 1;
     }
     return 0;
@@ -1002,6 +1038,9 @@ int load_game(void) {
     tools = s.tools; last_stars = s.last_stars; known = s.known;
     for (int i = 0; i < NCOLORS; i++) stock[i] = s.stock[i];
     for (int i = 0; i < UPG_COUNT; i++) upg[i] = s.upg[i];
-    for (int i = 0; i < GEAR_COUNT; i++) gear[i] = s.gear[i] ? s.gear[i] : 1;
+    for (int i = 0; i < GEAR_COUNT; i++) gear[i] = s.gear[i];
+    if (!gear[GEAR_AXE]) gear[GEAR_AXE] = 1;
+    if (!gear[GEAR_BAG]) gear[GEAR_BAG] = 1;
+    mine_deepest = s.deepest ? s.deepest : 1;
     return s.phase;
 }

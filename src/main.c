@@ -41,6 +41,7 @@ static void enter(int s) {
     if (s == SC_SHOP) shop_enter();
     else if (s == SC_DAY) day_enter();
     else if (s == SC_FIELD) field_enter();
+    else if (s == SC_DEV) dev_enter();
     else if (s == SC_TITLE || s == SC_FREE || s == SC_SHOW) show_enter();
     else if (s == SC_INTRO) { show_enter(); intro_begin(); }
     else if (s == SC_REVIEW) {
@@ -76,7 +77,7 @@ int main(void) {
         if (blank_frames && --blank_frames == 0) REG_DISPCNT &= ~0x80;
         u8* back = page ? PAGE1 : PAGE0;
         for (int i = 0; i < 128 * 4; i++) OAM[i] = oam[i];
-        if (scene != SC_SHOP && scene != SC_DAY && scene != SC_FIELD) show_vblank();   // the sky's light and shake
+        if (scene != SC_SHOP && scene != SC_DAY && scene != SC_FIELD && scene != SC_DEV) show_vblank();   // the sky's light and shake
 
         REG_TM2CNT = 0; REG_TM2D = 0; REG_TM2CNT = 0x81;   // time this frame's work
         frame++;
@@ -89,6 +90,7 @@ int main(void) {
         }
 
         noam = 0;
+        if (dev_wanted()) { dev_open(); hit = 0; }   // L+R+B: the dev menu
         switch (scene) {
         case SC_TITLE: title_update(back); break;
         case SC_FREE: free_update(back); break;
@@ -97,6 +99,7 @@ int main(void) {
         case SC_REVIEW: review_update(back); break;
         case SC_DAY: day_update(back); break;
         case SC_FIELD: field_update(back); break;
+        case SC_DEV: dev_update(back); break;
         case SC_INTRO: intro_update(back); break;
         }
         for (int i = noam; i < 128; i++) { oam[i * 4] = 0x200; oam[i * 4 + 1] = 0; oam[i * 4 + 2] = 0; }

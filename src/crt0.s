@@ -46,6 +46,14 @@ rom_start:
     strlt   r3, [r1], #4
     blt     2b
 
+    @ Zero the variables kept in EWRAM
+    ldr     r1, =__ewram_start
+    ldr     r2, =__ewram_end
+    mov     r3, #0
+4:  cmp     r1, r2
+    strlt   r3, [r1], #4
+    blt     4b
+
     ldr     r0, =main
     bx      r0
 3:  b       3b

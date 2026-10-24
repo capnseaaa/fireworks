@@ -23,15 +23,15 @@ static const Area areas[A_COUNT] = {
 };
 
 // What you can do at each spot. kind picks the result in do_spot().
-enum { K_OPEN, K_UPGRADE, K_EXPLORE, K_SULFUR, K_TUNNEL, K_SAND, K_DRIFT, K_POOLS,
-       K_CLIMB, K_RUINS, K_BUY_POWDER, K_BUY_SHELLS, K_BUY_STAR, K_BUY_PICK, K_BUY_NET, K_BUY_ROPE, K_BUY_AXE, K_BUY_BAG };
+enum { K_OPEN, K_UPGRADE, K_EXPLORE, K_MINE, K_GEODES, K_SAND, K_DRIFT, K_POOLS,
+       K_CLIMB, K_RUINS, K_BUY_POWDER, K_BUY_SHELLS, K_BUY_STAR, K_BUY_PICK, K_BUY_NET, K_BUY_ROPE, K_BUY_AXE, K_BUY_BAG, K_BUY_LANTERN };
 typedef struct { u8 area, kind, minutes, needs, price; const char* name; const char* desc; } Spot;
 static const Spot spots[] = {
     { A_HOME, K_OPEN, 0, 0, 0, "OPEN THE SHOP", "END THE DAY AND OPEN FOR THE NIGHT." },
     { A_HOME, K_UPGRADE, 0, 0, 0, "IMPROVE THE SHOP", "SPEND COINS ON UPGRADES FOR THE SHOP." },
     { A_FOREST, K_EXPLORE, 0, 0, 0, "EXPLORE", "WALK THE WOODS: CHOP TREES, PICK FLOWERS, SEARCH BUSHES, BURN CHARCOAL." },
-    { A_MINE, K_SULFUR, 60, 0, 0, "DIG SULFUR", "SULFUR FOR POWDER. SOMETIMES RED ORE." },
-    { A_MINE, K_TUNNEL, 90, TOOL_PICK, 0, "DEEP TUNNEL", "BLUE, CYAN, AND VIOLET ORE. NEEDS A PICKAXE." },
+    { A_MINE, K_MINE, 0, 0, 0, "ENTER THE MINE", "BREAK ROCKS FOR ORE. ONE ROCK ON EACH FLOOR HIDES THE LADDER DOWN." },
+    { A_MINE, K_GEODES, 30, 0, 0, "CRACK GEODES", "THREE GEODES A DAY. STOP THE POINTER ON THE CRACK." },
     { A_BEACH, K_SAND, 45, 0, 0, "COMB THE SAND", "SALT AND SEA GLASS: YELLOW, ORANGE, GOLD." },
     { A_BEACH, K_DRIFT, 45, 0, 0, "DRIFTWOOD", "WASHED-UP WOOD FOR SHELLS." },
     { A_BEACH, K_POOLS, 60, TOOL_NET, 0, "TIDE POOLS", "PINK AND CYAN SHELLS, BOTTLES. NEEDS A NET." },
@@ -40,7 +40,8 @@ static const Spot spots[] = {
     { A_MARKET, K_BUY_POWDER, 10, 0, 12, "3 POWDER", "THREE SCOOPS OF BLACK POWDER." },
     { A_MARKET, K_BUY_SHELLS, 10, 0, 15, "2 SHELLS", "TWO PAPER SHELLS, READY TO FILL." },
     { A_MARKET, K_BUY_STAR, 10, 0, 8, "1 STAR", "ONE COLORED STAR. PICK THE COLOR." },
-    { A_MARKET, K_BUY_PICK, 10, 0, 60, "PICKAXE", "OPENS THE MINE'S DEEP TUNNEL." },
+    { A_MARKET, K_BUY_PICK, 10, 0, 0, "PICKAXE", "BREAKS ROCKS IN THE MINE. BETTER ONES BREAK HARD ROCK FASTER." },
+    { A_MARKET, K_BUY_LANTERN, 10, 0, 0, "LANTERN", "LIGHTS THE MINE BELOW FLOOR 4." },
     { A_MARKET, K_BUY_NET, 10, 0, 50, "NET", "OPENS THE BEACH'S TIDE POOLS." },
     { A_MARKET, K_BUY_ROPE, 10, 0, 80, "ROPE", "OPENS THE QUARRY." },
     { A_MARKET, K_BUY_AXE, 10, 0, 0, "AXE", "A SHARPER AXE: FEWER SWINGS, AND IT FELLS THE OLD TREE." },
@@ -78,14 +79,16 @@ static int area_menu(void) {           // the spots at the current area
     return menu_n;
 }
 
-static int is_tool(int k) { return k == K_BUY_PICK || k == K_BUY_NET || k == K_BUY_ROPE; }
-static int tool_bit(int k) { return k == K_BUY_PICK ? TOOL_PICK : k == K_BUY_NET ? TOOL_NET : TOOL_ROPE; }
+static int is_tool(int k) { return k == K_BUY_NET || k == K_BUY_ROPE; }
+static int tool_bit(int k) { return k == K_BUY_NET ? TOOL_NET : TOOL_ROPE; }
 
 // Gear prices go up with each tier; 0 once you have the best.
 static int price_of(int i) {
     int k = spots[i].kind;
     if (k == K_BUY_AXE) return gear[GEAR_AXE] == 1 ? 100 : gear[GEAR_AXE] == 2 ? 250 : 0;
     if (k == K_BUY_BAG) return gear[GEAR_BAG] == 1 ? 80 : gear[GEAR_BAG] == 2 ? 200 : 0;
+    if (k == K_BUY_PICK) return gear[GEAR_PICK] == 0 ? 60 : gear[GEAR_PICK] == 1 ? 150 : gear[GEAR_PICK] == 2 ? 300 : 0;
+    if (k == K_BUY_LANTERN) return gear[GEAR_LANTERN] ? 0 : 120;
     return spots[i].price;
 }
 
@@ -97,6 +100,7 @@ static char* spot_name(char* p, int i) {
     p = cat(p, spots[i].name);
     if (k == K_BUY_AXE) p = cat(p, tiers[gear[GEAR_AXE] < 3 ? gear[GEAR_AXE] + 1 : 3]);
     if (k == K_BUY_BAG) p = cat(p, tiers[gear[GEAR_BAG] < 3 ? gear[GEAR_BAG] + 1 : 3]);
+    if (k == K_BUY_PICK) p = cat(p, tiers[gear[GEAR_PICK] < 3 ? gear[GEAR_PICK] + 1 : 3]);
     return p;
 }
 
@@ -105,9 +109,12 @@ static const char* blocked(int i) {
     const Spot* s = &spots[i];
     if (s->kind == K_OPEN || s->kind == K_UPGRADE) return 0;
     if (s->kind == K_EXPLORE) return day_min >= DAY_END ? "NOT ENOUGH DAYLIGHT" : 0;
-    if ((s->kind == K_BUY_AXE || s->kind == K_BUY_BAG) && !price_of(i)) return "YOU HAVE THE BEST ONE";
+    if (s->kind == K_MINE) return day_min >= DAY_END ? "NOT ENOUGH DAYLIGHT" : 0;
+    if ((s->kind == K_BUY_AXE || s->kind == K_BUY_BAG || s->kind == K_BUY_PICK || s->kind == K_BUY_LANTERN) && !price_of(i))
+        return "YOU HAVE THE BEST ONE";
+    if (s->kind == K_GEODES && geodes_done()) return "DONE FOR TODAY";
     if (s->needs && !(tools & s->needs))
-        return s->needs == TOOL_PICK ? "NEEDS A PICKAXE" : s->needs == TOOL_NET ? "NEEDS A NET" : "NEEDS A ROPE";
+        return s->needs == TOOL_NET ? "NEEDS A NET" : "NEEDS A ROPE";
     if (is_tool(s->kind) && (tools & tool_bit(s->kind))) return "YOU HAVE ONE";
     if (is_buy(i) && coins < price_of(i)) return "NOT ENOUGH COINS";
     if (!is_buy(i) && (used & (1u << i))) return "DONE FOR TODAY";
@@ -150,24 +157,11 @@ static char* maybe_scroll(char* p, int chance) {
 }
 
 static void do_spot(int i) {
-    static const u8 reds[] = { H_RED }, deep[] = { H_BLUE, H_CYAN, H_VIOLET, H_GREEN };
     static const u8 warm[] = { H_YELLOW, H_ORANGE, H_GOLD }, pools[] = { H_PINK, H_CYAN, H_BLUE };
     static const u8 pale[] = { H_WHITE, H_SILVER }, odd[] = { H_PINK, H_VIOLET, H_SILVER };
     char* p = cat(msg, "YOU GOT ");
     int n;
     switch (spots[i].kind) {
-    case K_SULFUR:
-        n = 3;
-        powder += n;
-        p = cat(p, "3 POWDER");
-        if (rnd() % 100 < 40) { p = cat(p, " AND "); p = add_stars(p, reds, 1, 1); }
-        cat(p, ".");
-        break;
-    case K_TUNNEL:
-        p = add_stars(p, deep, 4, 2 + (rnd() & 1));
-        p = cat(p, ".");
-        maybe_scroll(p, 10);
-        break;
     case K_SAND:
         p = add_stars(p, warm, 3, 2);
         cat(p, ".");
@@ -194,7 +188,8 @@ static void do_spot(int i) {
         break;
     case K_BUY_POWDER: powder += 3; cat(msg, "YOU BOUGHT 3 POWDER."); break;
     case K_BUY_SHELLS: shells += 2; cat(msg, "YOU BOUGHT 2 SHELLS."); break;
-    case K_BUY_PICK: tools |= TOOL_PICK; cat(msg, "YOU BOUGHT A PICKAXE! THE MINE'S DEEP TUNNEL IS OPEN."); break;
+    case K_BUY_PICK: gear[GEAR_PICK]++; cat(msg, gear[GEAR_PICK] == 1 ? "A PICKAXE! TIME TO TRY THE MINE." : "A BETTER PICKAXE! ROCKS BREAK FASTER."); break;
+    case K_BUY_LANTERN: gear[GEAR_LANTERN] = 1; cat(msg, "A LANTERN! NOW I CAN GO DEEPER THAN FLOOR 4."); break;
     case K_BUY_NET: tools |= TOOL_NET; cat(msg, "YOU BOUGHT A NET! THE TIDE POOLS ARE OPEN."); break;
     case K_BUY_ROPE: tools |= TOOL_ROPE; cat(msg, "YOU BOUGHT A ROPE! THE QUARRY IS OPEN."); break;
     case K_BUY_AXE: gear[GEAR_AXE]++; cat(msg, "A SHARPER AXE! TREES COME DOWN FASTER."); break;
@@ -310,7 +305,9 @@ static void step(void) {
         if (blocked(i)) break;
         if (spots[i].kind == K_OPEN) { set_scene(SC_SHOP); break; }
         if (spots[i].kind == K_UPGRADE) { go(DS_UPGRADE); cursor = 0; break; }
-        if (spots[i].kind == K_EXPLORE) { set_scene(SC_FIELD); break; }
+        if (spots[i].kind == K_EXPLORE) { field_go(FIELD_FOREST); break; }
+        if (spots[i].kind == K_MINE) { field_go(FIELD_MINE); break; }
+        if (spots[i].kind == K_GEODES) { field_go(FIELD_GEODES); break; }
         if (spots[i].kind == K_BUY_STAR) { go(DS_COLOR); cursor = 0; break; }
         work_spot = i;
         work_from = day_min;
@@ -420,8 +417,9 @@ static void draw_bag(u8* back) {
         text(back, x + 7, y, buf, stock[h] ? UI_WHITE : UI_GRAY);
     }
     p = cat(buf, "TOOLS: ");
-    if (!tools) p = cat(p, "NONE");
-    if (tools & TOOL_PICK) p = cat(p, "PICKAXE ");
+    if (!tools && !gear[GEAR_PICK] && !gear[GEAR_LANTERN]) p = cat(p, "NONE");
+    if (gear[GEAR_PICK]) { p = cat(p, "PICK "); p = cat_num(p, gear[GEAR_PICK]); p = cat(p, " "); }
+    if (gear[GEAR_LANTERN]) p = cat(p, "LANTERN ");
     if (tools & TOOL_NET) p = cat(p, "NET ");
     if (tools & TOOL_ROPE) p = cat(p, "ROPE");
     text(back, 22, 84, buf, UI_WHITE);

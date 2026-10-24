@@ -1,5 +1,6 @@
-// Walk-around gathering, in the spirit of Stardew Valley: trees to chop, bushes to
-// search, sparkling flowers and debris that come back each day, and a kiln minigame.
+// Walk-around gathering, in the spirit of Stardew Valley. The forest: trees to chop,
+// bushes to search, sparkling flowers and debris that come back each day, and the kiln.
+// The mine: floors of rocks to break, one hiding the ladder down, with richer ore deeper.
 // Walking is free; every action costs a few minutes of daylight.
 #include "game.h"
 #include "art.h"
@@ -9,31 +10,49 @@
 // Offsets into the nature tiles, in make_art.py's nature_words order.
 enum { NT_OAK = 0, NT_BIG = 16, NT_STUMP = 80, NT_BUSH = 84, NT_BARE = 88, NT_KILN = 92, NT_TWIG = 108,
        NT_STONE = 112, NT_WEEDS = 116, NT_AXE = 120, NT_FLOWER = 124, NT_SPARK = 128 };
+// In the mine the same tile slots hold the mine sprites instead.
+enum { MT_ROCK = 0, MT_HARD = 4, MT_ORE = 8, MT_HOLE = 12, MT_PICK = 16, MT_SPARK = 20 };
 
 u8 gear[GEAR_COUNT];
 int bag_used;                          // items picked up today (the bag holds bag_size())
 
 int bag_size(void) { return 10 + 10 * gear[GEAR_BAG]; }   // 20, 30, 40
 
-enum { N_OAK, N_BIG, N_STUMP, N_BIGSTUMP, N_BUSH, N_BARE, N_KILN, N_TWIG, N_STONE, N_WEEDS, N_FLOWER, N_GONE };
+enum { N_OAK, N_BIG, N_STUMP, N_BIGSTUMP, N_BUSH, N_BARE, N_KILN, N_TWIG, N_STONE, N_WEEDS, N_FLOWER, N_GONE,
+       N_ROCK, N_HARD, N_ORE, N_HOLE, N_UP };
 typedef struct { u8 type, x, y, hp, color; } Node;   // x, y = where it meets the ground
 
 #define MAXNODES 32
 static Node nodes[MAXNODES];
-static int nnodes, nodes_day = -1, kiln_used;
+static int nnodes;
+static Node forest[MAXNODES];          // the forest keeps its state all day
+static int nforest, forest_day = -1, kiln_used, geodes_day = -1;
+
+int field_area;                        // FIELD_FOREST, FIELD_MINE, FIELD_GEODES
+int mine_floor, mine_deepest;          // the floor you are on; the deepest you have reached
+static int hole_rock;                  // the rock hiding the ladder down
+
+// Ore colors (palette banks 2..8): sulfur, red, blue, green, cyan, violet, silver.
+enum { ORE_SULFUR, ORE_RED, ORE_BLUE, ORE_GREEN, ORE_CYAN, ORE_VIOLET, ORE_SILVER };
+static const u8 ore_hue[7] = { 0, H_RED, H_BLUE, H_GREEN, H_CYAN, H_VIOLET, H_SILVER };
 
 // The flowers' colors, and the stars they turn into.
 static const u8 flower_hue[6] = { H_RED, H_BLUE, H_YELLOW, H_VIOLET, H_PINK, H_ORANGE };
 
 static int px, py, face, step_t, moving;   // player feet; face: 0 down, 1 up, 2 left, 3 right
 static int swing, swing_node;               // axe swing frames left, and its target
-static char note[64];                       // a short message at the bottom
+static char note[96];                       // a short message at the bottom (2 lines)
 static int note_t;
 static char pops[4][24];                    // "+2 SHELLS" popping up over the spot
 static s16 pop_x[4], pop_y[4], pop_t[4];
-enum { F_WALK, F_KILN };
+enum { F_WALK, F_KILN, F_GEODE };
 static int fstate;
 static int heat, zone, zone_v, score, kiln_t;   // the kiln minigame
+static int geode_n, geode_pos, geode_v, geode_wait;   // the geode minigame
+static char geode_res[3][24];
+
+static void leave_mine(void);
+static void geode_start(void);
 
 static void add_node(int type, int x, int y, int hp) {
     if (nnodes >= MAXNODES) return;
@@ -78,11 +97,52 @@ static void make_day(void) {
     kiln_used = 0;
 }
 
+// A fresh mine floor: rocks everywhere, some ore (richer deeper), one rock hides the ladder.
+static void make_floor(int f) {
+    nnodes = 0;
+    add_node(N_UP, 120, 52, 0);
+    static const u8 pools[3][7] = {
+        { ORE_SULFUR, ORE_SULFUR, ORE_RED, ORE_BLUE, ORE_SULFUR, ORE_RED, ORE_BLUE },
+        { ORE_SULFUR, ORE_RED, ORE_BLUE, ORE_GREEN, ORE_CYAN, ORE_GREEN, ORE_CYAN },
+        { ORE_RED, ORE_BLUE, ORE_GREEN, ORE_CYAN, ORE_VIOLET, ORE_SILVER, ORE_VIOLET },
+    };
+    const u8* pool = pools[f <= 3 ? 0 : f <= 6 ? 1 : 2];
+    int rocks = 11 + rnd() % 5, ores = 2 + f / 3 + rnd() % 2;
+    for (int tries = 0; tries < 300 && (rocks > 0 || ores > 0); tries++) {
+        int x = 30 + rnd() % 180, y = 66 + rnd() % 84;
+        if (x > 104 && x < 136 && y < 76) continue;         // room around the ladder up
+        int ok = 1;
+        for (int i = 0; i < nnodes && ok; i++) {
+            int dx = nodes[i].x - x, dy = nodes[i].y - y;
+            if (dx * dx + dy * dy < 19 * 19) ok = 0;
+        }
+        if (!ok) continue;
+        if (ores > 0) {
+            add_node(N_ORE, x, y, 3);
+            nodes[nnodes - 1].color = pool[rnd() % 7];
+            ores--;
+        } else {
+            int hard = f >= 4 && rnd() % 4 == 0;
+            add_node(hard ? N_HARD : N_ROCK, x, y, hard ? 4 : 2);
+            rocks--;
+        }
+    }
+    // The ladder hides under a plain rock (none on the deepest floor).
+    hole_rock = -1;
+    if (f < MINE_FLOORS)
+        for (int k = 0; k < 40 && hole_rock < 0; k++) {
+            int i = 1 + rnd() % (nnodes - 1);
+            if (nodes[i].type == N_ROCK) hole_rock = i;
+        }
+}
+
 // Each kind's solid footprint (half width, height above the ground point).
 static void footprint(const Node* n, int* hw, int* hh) {
     switch (n->type) {
     case N_OAK: case N_STUMP: *hw = 6; *hh = 6; break;
     case N_BIG: case N_BIGSTUMP: *hw = 12; *hh = 8; break;
+    case N_HOLE: *hw = 0; *hh = 0; break;               // walk over the hole
+    case N_UP: *hw = 8; *hh = 6; break;
     case N_KILN: *hw = 12; *hh = 8; break;
     case N_GONE: *hw = 0; *hh = 0; break;
     default: *hw = 6; *hh = 5; break;
@@ -90,8 +150,12 @@ static void footprint(const Node* n, int* hw, int* hh) {
 }
 
 static int blocked(int x, int y) {
-    if (x < 22 || x > 218 || y < 44) return 1;
-    if (y > 154 && (x < 106 || x > 134)) return 1;
+    if (field_area == FIELD_MINE) {
+        if (x < 24 || x > 216 || y < 58 || y > 152) return 1;
+    } else {
+        if (x < 22 || x > 218 || y < 44) return 1;
+        if (y > 154 && (x < 106 || x > 134)) return 1;
+    }
     for (int i = 0; i < nnodes; i++) {
         int hw, hh;
         footprint(&nodes[i], &hw, &hh);
@@ -123,8 +187,9 @@ static int facing_node(void) {
 }
 
 static void say_note(const char* s) {
-    note[0] = 0;
-    cat(note, s);
+    unsigned k = 0;
+    while (s[k] && k < sizeof note - 1) { note[k] = s[k]; k++; }   // never past the buffer
+    note[k] = 0;
     note_t = 120;
 }
 
@@ -206,7 +271,7 @@ static void act(int i) {
         else pop(x, y + 10, "CLEARED");
         break;
     case N_STONE:
-        if (!(tools & TOOL_PICK)) { say_note("I NEED A PICKAXE FOR THAT. THE MARKET SELLS THEM."); return; }
+        if (!gear[GEAR_PICK]) { say_note("I NEED A PICKAXE FOR THAT. THE MARKET SELLS THEM."); return; }
         spend(5);
         n->type = N_GONE;
         if ((rnd() & 1) && take(1)) { powder++; pop(x, y + 10, "+1 POWDER"); }
@@ -221,18 +286,57 @@ static void act(int i) {
     case N_BIGSTUMP:
         say_note("JUST A STUMP NOW. IT'LL GROW BACK.");
         break;
+    case N_ROCK:
+    case N_HARD:
+    case N_ORE:
+        if (!gear[GEAR_PICK]) { say_note("I NEED A PICKAXE. THE MARKET SELLS THEM."); return; }
+        if (n->type == N_HARD && gear[GEAR_PICK] < 2) { say_note("THIS ROCK IS TOO HARD. I NEED A BETTER PICKAXE."); return; }
+        swing = 14;
+        swing_node = i;
+        spend(5);
+        break;
+    case N_UP:
+        leave_mine();
+        break;
     case N_BARE:
         say_note("NOTHING LEFT ON THIS BUSH TODAY.");
         break;
     }
 }
 
-// A swing lands: chip the tree, and fell it when it runs out.
+// A swing lands: chip the tree or rock, and fell or break it when it runs out.
 static void land_swing(void) {
     Node* n = &nodes[swing_node];
-    int dmg = gear[GEAR_AXE];
+    int dmg = field_area == FIELD_MINE ? gear[GEAR_PICK] : gear[GEAR_AXE];
     n->hp = n->hp > dmg ? n->hp - dmg : 0;
     if (n->hp) return;
+    if (n->type == N_ROCK || n->type == N_HARD) {
+        if (swing_node == hole_rock) {
+            n->type = N_HOLE;
+            pop(n->x, n->y - 20, "A LADDER!");
+            return;
+        }
+        n->type = N_GONE;
+        if (rnd() % 100 < 25 && take(1)) { powder++; pop(n->x, n->y - 20, "+1 POWDER"); }
+        return;
+    }
+    if (n->type == N_ORE) {
+        n->type = N_GONE;
+        if (n->color == ORE_SULFUR) {
+            int got = take(2);
+            powder += got;
+            pop_items(n->x, n->y - 20, got, "POWDER");
+        } else {
+            int got = take(1 + (gear[GEAR_PICK] >= 3));
+            stock[ore_hue[n->color]] += got;
+            char buf[24], *p = cat(buf, "+");
+            p = cat_num(p, got);
+            p = cat(p, " ");
+            cat(p, hue_names[ore_hue[n->color]]);
+            pop(n->x, n->y - 20, buf);
+        }
+        return;
+    }
     if (n->type == N_OAK) {
         n->type = N_STUMP;
         int got = take(2 + (gear[GEAR_AXE] >= 3));
@@ -291,7 +395,93 @@ static void draw_kiln(u8* back) {
     fill_rect(back, bx, by + 18, bw * kiln_t / 480, 4, UI_RED);
 }
 
+// --- the geodes: stop the swinging pointer on the crack ------------------------------
+
+static void geode_start(void) {
+    fstate = F_GEODE;
+    geode_n = 0; geode_pos = 0; geode_v = 2; geode_wait = 0;
+}
+
+static void geode_step(void) {
+    if (geode_wait) {
+        if (--geode_wait == 0 && ++geode_n < 3) { geode_pos = 0; geode_v = 2 + geode_n; }
+        if (geode_n >= 3 && geode_wait == 0) {
+            spend(30);
+            geodes_day = night;
+            say_note("THAT'S ALL THE GEODES FOR TODAY.");
+            fstate = F_WALK;
+        }
+        return;
+    }
+    geode_pos += geode_v;
+    if (geode_pos <= 0 || geode_pos >= 100) geode_v = -geode_v;
+    if (hit & KEY_A) {
+        int d = geode_pos > 50 ? geode_pos - 50 : 50 - geode_pos;
+        char* p = geode_res[geode_n];
+        static const u8 rare[3] = { H_VIOLET, H_SILVER, H_CYAN }, common[3] = { H_RED, H_BLUE, H_GREEN };
+        if (d < 5 && take(1)) {
+            int h = rare[rnd() % 3];
+            stock[h]++;
+            p = cat(p, "PERFECT! 1 ");
+            cat(p, hue_names[h]);
+        } else if (d < 18 && take(1)) {
+            int h = common[rnd() % 3];
+            stock[h]++;
+            p = cat(p, "GOOD. 1 ");
+            cat(p, hue_names[h]);
+        } else {
+            if (take(1)) powder++;
+            cat(p, "IT CRUMBLED. 1 POWDER");
+        }
+        geode_wait = 50;
+    }
+}
+
+static void draw_geode(u8* back) {
+    box(back, 16, 24, 208, 100);
+    text(back, 26, 30, "CRACK THE GEODES", UI_YELLOW);
+    text(back, 26, 40, "PRESS A WHEN THE POINTER IS ON", UI_WHITE);
+    text(back, 26, 49, "THE CRACK. DEAD CENTER IS RAREST.", UI_WHITE);
+    int bx = 30, by = 66, bw = 180;
+    fill_rect(back, bx, by, bw, 10, UI_SHADOW);
+    fill_rect(back, bx + 32 * bw / 100, by, 36 * bw / 100, 10, UI_DK_GREEN);
+    fill_rect(back, bx + 45 * bw / 100, by, 10 * bw / 100, 10, UI_YELLOW);
+    fill_rect(back, bx + geode_pos * bw / 100 - 1, by - 3, 3, 16, UI_WHITE);
+    for (int k = 0; k < 3; k++) {
+        char buf[48], *p = cat(buf, "GEODE ");
+        p = cat_num(p, k + 1);
+        p = cat(p, ": ");
+        cat(p, k < geode_n || (k == geode_n && geode_wait) ? geode_res[k] : "...");
+        text(back, 26, 86 + 10 * k, buf, k < geode_n || (k == geode_n && geode_wait) ? UI_GREEN : UI_GRAY);
+    }
+}
+
 // --- scene ---------------------------------------------------------------------------
+
+// Deeper floors get darker; the BG palette is the map's, dimmed.
+static void mine_light(void) {
+    int pct = 100 - (mine_floor - 1) * 5;
+    for (int i = 0; i < MAP_PAL_N; i++) {
+        u16 c = map_pal[i];
+        int r = (c & 31) * pct / 100, g = ((c >> 5) & 31) * pct / 100, b = ((c >> 10) & 31) * pct / 100;
+        BG_PAL[16 + i] = RGB(r, g, b);
+    }
+}
+
+static void floor_note(void) {
+    char buf[96], *p = cat(buf, "MINE FLOOR ");
+    p = cat_num(p, mine_floor);
+    cat(p, mine_floor == 1 ? ". (A: MINE ROCKS. THE LADDER UP LEAVES.)" : ".");
+    say_note(buf);
+}
+
+int geodes_done(void) { return geodes_day == night; }
+
+void field_go(int area) {
+    field_area = area;
+    mine_floor = 1;
+    set_scene(SC_FIELD);
+}
 
 void field_enter(void) {
     blank_once();
@@ -301,26 +491,60 @@ void field_enter(void) {
     REG_DISPCNT &= ~(1 << 13);
     vu32* t = (vu32*)OBJ_TILES;
     for (int i = 0; i < 6 * 8 * 8; i++) t[T_PLAYER * 8 + i] = player_tiles[i];
-    for (int i = 0; i < (NT_SPARK + 1) * 8; i++) t[T_NATURE * 8 + i] = nature_tiles[i];
     for (unsigned i = 0; i < sizeof player_pal / 2; i++) OBJ_PAL[i] = player_pal[i];
     for (unsigned i = 0; i < sizeof nature_pal / 2; i++) OBJ_PAL[16 + i] = nature_pal[i];
-    for (int i = 0; i < 6 * 16; i++) OBJ_PAL[32 + i] = flower_pals[i];
-    if (nodes_day != night) { make_day(); nodes_day = night; }
-    px = 120; py = 150; face = 1;
     swing = 0;
     note_t = 0;
     fstate = F_WALK;
     for (int i = 0; i < 4; i++) pop_t[i] = 0;
-    say_note("THE FOREST. (A: CHOP, PICK, SEARCH. WALK DOWN THE PATH TO LEAVE.)");
+    if (field_area == FIELD_FOREST) {
+        for (int i = 0; i < (NT_SPARK + 1) * 8; i++) t[T_NATURE * 8 + i] = nature_tiles[i];
+        for (int i = 0; i < 6 * 16; i++) OBJ_PAL[32 + i] = flower_pals[i];
+        if (forest_day != night) { make_day(); forest_day = night; nforest = nnodes; for (int i = 0; i < nnodes; i++) forest[i] = nodes[i]; }
+        nnodes = nforest;
+        for (int i = 0; i < nnodes; i++) nodes[i] = forest[i];
+        px = 120; py = 150; face = 1;
+        say_note("THE FOREST. (A: CHOP, PICK, SEARCH. WALK DOWN THE PATH TO LEAVE.)");
+    } else {
+        for (int i = 0; i < (MT_SPARK + 1) * 8; i++) t[T_NATURE * 8 + i] = mine_tiles[i];
+        for (int i = 0; i < 7 * 16; i++) OBJ_PAL[32 + i] = ore_pals[i];
+        if (field_area == FIELD_GEODES) { nnodes = 0; px = 120; py = 140; face = 1; geode_start(); return; }
+        mine_light();
+        make_floor(mine_floor);
+        px = 120; py = 70; face = 0;
+        floor_note();
+    }
 }
 
 static void leave(void) {
+    if (field_area == FIELD_FOREST) { nforest = nnodes; for (int i = 0; i < nnodes; i++) forest[i] = nodes[i]; }
     day_return();
+}
+
+static void leave_mine(void) { leave(); }
+
+// Standing on the open ladder hole: down to the next floor.
+static void descend(void) {
+    if (mine_floor + 1 >= MINE_DARK && !gear[GEAR_LANTERN]) {
+        if (!note_t) say_note("IT'S PITCH BLACK DOWN THERE. I NEED A LANTERN.");
+        return;
+    }
+    mine_floor++;
+    if (mine_floor > mine_deepest) mine_deepest = mine_floor;
+    spend(10);
+    mine_light();
+    make_floor(mine_floor);
+    px = 120; py = 70; face = 0;
+    for (int i = 0; i < 4; i++) pop_t[i] = 0;
+    floor_note();
 }
 
 void field_update(u8* back) {
     if (fstate == F_KILN) kiln_step();
-    else if (swing) {
+    else if (fstate == F_GEODE) geode_step();
+    else if (field_area == FIELD_GEODES) {
+        if (hit & (KEY_A | KEY_B)) { leave(); return; }
+    } else if (swing) {
         if (--swing == 4) land_swing();
     } else {
         int dx = 0, dy = 0;
@@ -336,20 +560,29 @@ void field_update(u8* back) {
         }
         if (moving) step_t++;
         if (py > 156) { leave(); return; }
+        if (field_area == FIELD_MINE)                    // step onto an open ladder hole
+            for (int i = 0; i < nnodes; i++)
+                if (nodes[i].type == N_HOLE && px > nodes[i].x - 6 && px < nodes[i].x + 6 && py > nodes[i].y - 8 && py < nodes[i].y + 2)
+                    descend();
         if (hit & KEY_A) {
             int i = facing_node();
             if (i >= 0) act(i);
         }
-        if (hit & KEY_B) { leave(); return; }
+        if (hit & KEY_B && field_area == FIELD_FOREST) { leave(); return; }
     }
     if (day_min >= DAY_END_MIN) { day_min = DAY_END_MIN; leave(); return; }
     if (note_t) note_t--;
 
-    copy_page(back, forest_bg);
+    copy_page(back, field_area == FIELD_FOREST ? forest_bg : mine_bg);
     // Status bar.
     char buf[48], *p = day_clock(buf, day_min);
     text(back, 3, 2, buf, UI_YELLOW);
-    text(back, 100, 2, "FOREST", UI_WHITE);
+    if (field_area == FIELD_FOREST) text(back, 100, 2, "FOREST", UI_WHITE);
+    else {
+        p = cat(buf, "MINE ");
+        cat_num(p, mine_floor);
+        text(back, 100, 2, field_area == FIELD_GEODES ? "MINE" : buf, UI_WHITE);
+    }
     p = cat(buf, "BAG ");
     p = cat_num(p, bag_used);
     p = cat(p, "/");
@@ -364,6 +597,7 @@ void field_update(u8* back) {
     // Window 0 keeps sprites out of whichever box is open.
     int wx0 = 0, wy0 = 0, wx1 = 0, wy1 = 0;
     if (fstate == F_KILN) { draw_kiln(back); wx0 = 20; wy0 = 30; wx1 = 220; wy1 = 110; }
+    else if (fstate == F_GEODE) { draw_geode(back); wx0 = 16; wy0 = 24; wx1 = 224; wy1 = 124; }
     else if (note_t) {
         char lines[2][41];
         int n = wrap(note, 37, lines, 2);
@@ -390,7 +624,7 @@ void field_update(u8* back) {
     }
     if (swing) {                                       // the axe, in front of the player
         int ax = px + (face == 2 ? -14 : face == 3 ? 2 : -2), ay = py - 22 + (swing > 7 ? -4 : 2);
-        sprite(ax, ay, T_NATURE + NT_AXE, 0, 1, 1);
+        sprite(ax, ay, T_NATURE + (field_area == FIELD_FOREST ? NT_AXE : MT_PICK), 0, 1, 1);
     }
     for (int k = 0; k < n; k++) {
         int i = order[k];
@@ -403,6 +637,18 @@ void field_update(u8* back) {
             continue;
         }
         const Node* nd = &nodes[i];
+        if (field_area != FIELD_FOREST) {
+            switch (nd->type) {
+            case N_ROCK: sprite(nd->x - 8, nd->y - 12, T_NATURE + MT_ROCK, 0, 1, 1); break;
+            case N_HARD: sprite(nd->x - 8, nd->y - 12, T_NATURE + MT_HARD, 0, 1, 1); break;
+            case N_ORE:
+                if ((frame + i * 17) % 100 < 10) sprite(nd->x + 2, nd->y - 16, T_NATURE + MT_SPARK, 0, 0, 1);
+                sprite(nd->x - 8, nd->y - 12, T_NATURE + MT_ORE, 0, 1, 2 + nd->color);
+                break;
+            case N_HOLE: sprite(nd->x - 8, nd->y - 12, T_NATURE + MT_HOLE, 0, 1, 1); break;
+            }
+            continue;
+        }
         switch (nd->type) {
         case N_OAK: sprite(nd->x - 16, nd->y - 31, T_NATURE + NT_OAK, 0, 2, 1); break;
         case N_BIG: sprite(nd->x - 32, nd->y - 62, T_NATURE + NT_BIG, 0, 3, 1); break;

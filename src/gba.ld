@@ -24,13 +24,22 @@ SECTIONS {
     } > iwram AT > rom
     __data_lma = LOADADDR(.data);
 
+    /* Only the particle engine's variables need fast IWRAM. */
     .bss (NOLOAD) : {
         __bss_start = .;
-        *(.bss*)
-        *(COMMON)
+        *render.o(.bss* COMMON)
         . = ALIGN(4);
         __bss_end = .;
     } > iwram
+
+    /* Everything else lives in the 256 KB of EWRAM, leaving IWRAM room for the stack. */
+    .ewram (NOLOAD) : {
+        __ewram_start = .;
+        *(.bss*)
+        *(COMMON)
+        . = ALIGN(4);
+        __ewram_end = .;
+    } > ewram
 
     /DISCARD/ : { *(.ARM.exidx*) *(.ARM.attributes) *(.comment) }
 }

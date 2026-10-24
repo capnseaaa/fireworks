@@ -12,6 +12,7 @@
 #include <mgba/core/config.h>
 #include <mgba/core/log.h>
 #include <mgba/core/blip_buf.h>
+#include <mgba/internal/arm/arm.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -119,7 +120,11 @@ int main(int argc, char** argv) {
             for (int guard = 0; guard < 240 && core->busRead32(core, frame_addr) == f0; guard++)
                 { core->runFrame(core); if (wav) wav_samples += drain_audio(core, wav); }
         }
-        if (shot[0] == '@') {   // @addr,addr: print 32-bit values from memory
+        if (shot[0] == 'P' && shot[1] == 'C') {   // PC: print where the CPU is (find a hang)
+            struct ARMCore* cpu = core->cpu;
+            printf("PC=%08X LR=%08X SP=%08X\n", cpu->gprs[15], cpu->gprs[14], cpu->gprs[13]);
+        } else if (shot[0] == '@') {   // @addr,addr: print 32-bit values from memory
+
             char* q = shot + 1;
             while (*q) {
                 unsigned a = strtoul(q, &q, 16);

@@ -111,3 +111,17 @@ char* cat_num(char* d, int v) {
     *d = 0;
     return d;
 }
+
+// gcc calls these for struct copies and clears; there is no C library to provide them.
+void* memcpy(void* dst, const void* src, unsigned n) {
+    u8* d = dst;
+    const u8* s = src;
+    while (n--) *d++ = *s++;
+    return dst;
+}
+
+void* memset(void* dst, int c, unsigned n) {
+    u8* d = dst;
+    while (n--) *d++ = (u8)c;
+    return dst;
+}

@@ -16,7 +16,7 @@ extern const u8 size_time[3], pat_time[P_COUNT], size_powder[3], size_pay[3];
 // --- main.c: frame, input, sprites, scenes ---
 extern volatile u32 frame;
 extern u16 keys, hit;            // held, newly pressed
-enum { SC_TITLE, SC_FREE, SC_SHOP, SC_SHOW, SC_REVIEW, SC_DAY, SC_INTRO, SC_FIELD };
+enum { SC_TITLE, SC_FREE, SC_SHOP, SC_SHOW, SC_REVIEW, SC_DAY, SC_INTRO, SC_FIELD, SC_DEV };
 extern int scene;
 void set_scene(int s);            // switches at the start of the next frame
 void blank_once(void);            // hide the screen until the next drawn frame (scene loads)
@@ -73,12 +73,24 @@ extern int day_min;
 #define DAY_END_MIN 600           // 6 PM
 
 // --- field.c: walking an area and gathering ---
-enum { GEAR_AXE, GEAR_BAG, GEAR_COUNT };
+enum { GEAR_AXE, GEAR_BAG, GEAR_PICK, GEAR_LANTERN, GEAR_COUNT };   // tiers; pickaxe/lantern 0 = none
 extern u8 gear[GEAR_COUNT];       // tier 1..3
 extern int bag_used;              // items picked up today
 int bag_size(void);
+enum { FIELD_FOREST, FIELD_MINE, FIELD_GEODES };
+#define MINE_FLOORS 10
+#define MINE_DARK 5                // floors from here down need a lantern
+extern int mine_floor, mine_deepest;
+void field_go(int area);
+int geodes_done(void);
 void field_enter(void);
 void field_update(u8* back);
+
+// --- dev.c: L+R+B test menu ---
+int dev_wanted(void);
+void dev_open(void);
+void dev_enter(void);
+void dev_update(u8* back);
 
 // --- shop.c ---
 void shop_enter(void);

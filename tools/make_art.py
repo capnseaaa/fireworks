@@ -801,6 +801,7 @@ for g in (ARROW, PLAYER):
 # Same palette as the town map. Dense trees close in the edges; the clearing is open
 # ground for the trees, bushes, and kiln the game places as sprites. The path out is at
 # the bottom.
+town = mp                              # the finished town map (mp is reused below)
 fd = Image.new("P", (W, H), M["g1"])
 mp, mpx, md = fd, fd.load(), ImageDraw.Draw(fd)   # the map helpers draw into whatever these are
 mrng = random.Random(23)
@@ -1125,6 +1126,104 @@ for i, (im, pal_) in enumerate(((oak, NATURE_PAL), (kiln, NATURE_PAL), (twig, NA
     prev.paste(im2.convert("RGB"), (i * 64, 0))
 prev.resize((64 * 6 * 3, 64 * 3), Image.NEAREST).save(os.path.join(PREVIEW, "field_sprites.png"))
 
+
+# ---- mine floor (walk around and break rocks) ------------------------------------------
+# Same palette as the town map. Rough stone floor, rock walls with timber supports, and
+# the ladder up at the top middle. The game darkens the palette on deeper floors.
+mn = Image.new("P", (W, H), M["r1"])
+mp, mpx, md = mn, mn.load(), ImageDraw.Draw(mn)
+mrng = random.Random(41)
+for y in range(12, H):                 # floor: packed brown earth with grit
+    for x in range(W):
+        n = noise(x + 90, y + 40, 8) + (mrng.random() - 0.5) * 0.5
+        P(x, y, "t0" if n < -0.75 else "p2" if n < 0.45 else "p1")
+for _ in range(40):                    # cracks
+    x, y = mrng.randrange(24, 216), mrng.randrange(50, 150)
+    for k in range(mrng.randint(3, 7)):
+        P(x, y, "t0")
+        x += mrng.choice((-1, 0, 1)); y += 1
+for _ in range(90):                    # pebbles
+    x, y = mrng.randrange(20, 220), mrng.randrange(48, 152)
+    P(x, y, "r2"); P(x + 1, y + 1, "t0")
+for (cx, cy) in ((60, 120), (180, 70)):     # puddles
+    pix = [(x, y) for y in range(cy - 4, cy + 5) for x in range(cx - 10, cx + 11) if ((x - cx) / 10) ** 2 + ((y - cy) / 4) ** 2 <= 1]
+    for (x, y) in pix: P(x, y, "w0" if (x + y) % 5 else "w1")
+    outline_region(pix, "r0")
+
+
+def wall_px(x, y):
+    return y < 46 + int(3 * math.sin(x / 9.0)) or x < 18 + int(2 * math.sin(y / 7.0)) or x > 221 + int(2 * math.sin(y / 6.0)) or y > 153
+
+
+for y in range(12, H):                 # rock walls, lit from the top left
+    for x in range(W):
+        if wall_px(x, y):
+            n = noise(x, y, 5) + (mrng.random() - 0.5) * 0.7
+            c = "cave" if n < -0.6 else "r0" if n < 0.3 else "r1"
+            if (y // 6 + x // 11) % 3 == 0 and n > 0.5: c = "r2"     # lit rock faces
+            if not wall_px(x, y + 1) or not wall_px(x + 1, y) or not wall_px(x - 1, y):
+                c = "ol"
+            elif not wall_px(x, y + 2) and y > 30: c = "r2"            # the lip above the floor
+            P(x, y, c)
+for x in range(18, 222):               # a shadow along the foot of the back wall
+    for y in range(40, 56):
+        if not wall_px(x, y) and wall_px(x, y - 2): P(x, y, "t0"); break
+for x in (40, 90, 150, 200):           # timber supports along the back wall
+    for y in range(18, 48):
+        P(x, y, "wd1"); P(x + 1, y, "wd0"); P(x - 1, y, "ol"); P(x + 2, y, "ol")
+for xs in ((36, 46), (86, 96), (146, 156), (196, 206)):
+    for x in range(xs[0], xs[1]):
+        P(x, 18, "wd2"); P(x, 19, "wd1"); P(x, 17, "ol"); P(x, 20, "ol")
+for (x, y) in ((30, 30), (226, 100), (12, 140), (60, 22), (170, 28)):    # glints in the walls
+    P(x, y, "lamp"); P(x + 1, y, "r3")
+# The ladder up, at the top middle.
+for y in range(22, 50):
+    P(114, y, "wd1"); P(115, y, "wd0"); P(125, y, "wd1"); P(126, y, "wd0")
+    P(113, y, "ol"); P(127, y, "ol")
+    if y % 5 == 0:
+        for x in range(116, 125): P(x, y, "wd2"); P(x, y + 1, "wd0")
+md.rectangle((0, 0, W - 1, 10), fill=M["bar"])
+md.line((0, 11, W - 1, 11), fill=M["frame"])
+mn.putpalette(flat + [0] * (768 - len(flat)))
+mn.convert("RGB").save(os.path.join(PREVIEW, "mine_preview.png"))
+
+# Mine sprites (nature palette, OBJ bank 1; ores take their own banks for the gem color).
+rock_spr = grid_image(pad16(["................", "................", ".....11111......", "...11cccccc11...",
+                             "..1ccccccccdd1..", "..1cccccccddd1..", ".1cccccdddddd1..", ".1ccccdddddddd1.",
+                             ".1cdddddddddd1..", "..1dddddddd11...", "...111111111....", "..8888888888....",
+                             "................"], 16))
+hard_spr = grid_image(pad16(["................", "................", ".....11111......", "...11dddddd11...",
+                             "..1dddcddddd11..", "..1ddcdddddd61..", ".1ddddddd6ddd1..", ".1ddd6ddddd6dd1.",
+                             ".1dd666dd66dd1..", "..1d666666d11...", "...111111111....", "..8888888888....",
+                             "................"], 16))
+# Ore: a rock with gems in colors 3 and 4 of its own palette bank.
+ore_spr = grid_image(pad16(["................", "................", ".....11111......", "...11cc4cccc1...",
+                            "..1cc434ccdd1...", "..1cc333cddd31..", ".1cccc3dd3dd41..", ".1cc4ddd343ddd1.",
+                            ".1cd343dd3dd1...", "..1dd3ddddd11...", "...111111111....", "..8888888888....",
+                            "................"], 16))
+hole_spr = grid_image(pad16(["................", "................", "...1111111111...", "..1666666666661.",
+                             ".16111111111161.", ".16177777777161.", ".16111111111161.", ".16177777777161.",
+                             ".16111111111161.", ".16177777777161.", "..1666666666661.", "...1111111111...",
+                             "................"], 16))
+PICK = ["................", "....111111......", "...1cccccc1.....", "..1cc1111cc1....", ".1c1..17..1c1...",
+        ".11...17...11...", "......17........", "......17........", "......17........", "......17........",
+        "......17........", "......11........", "................", "................", "................",
+        "................"]
+mine_words = []
+for im, tw, th in ((rock_spr, 2, 2), (hard_spr, 2, 2), (ore_spr, 2, 2), (hole_spr, 2, 2), (grid_image(PICK), 2, 2),
+                   (sparkle, 1, 1)):
+    mine_words += tiles_4bpp(im, tw, th)
+# Ore palettes: 1 outline, 3 gem, 4 gem light, 8 shadow, 12/13 stone, the rest as nature.
+ORE_COLORS = {"SULFUR": ((230, 210, 60), (255, 245, 150)), "RED": ((210, 40, 40), (255, 120, 110)),
+              "BLUE": ((50, 110, 220), (130, 180, 255)), "GREEN": ((40, 170, 70), (120, 230, 130)),
+              "CYAN": ((40, 200, 220), (150, 240, 250)), "VIOLET": ((140, 60, 210), (200, 150, 255)),
+              "SILVER": ((180, 190, 210), (240, 245, 255))}
+ore_pals = []
+for name, (gem, light) in ORE_COLORS.items():
+    pal_ = list(NATURE_PAL)
+    pal_[3], pal_[4] = gem, light
+    ore_pals += [rgb15_early(c) for c in pal_]
+
 # ---- write art.c / art.h ----------------------------------------------------------
 
 
@@ -1160,7 +1259,7 @@ for ch in FONT_CHARS:
 arr("u8", "font_rows", rows, 28)
 hdr.append(f"#define MAP_PAL_N {len(mpal)}   // BG palette 16.. (the day map)")
 arr("u16", "map_pal", [rgb15(c) for c in mpal])
-arr("u8", "map_bg", list(mp.get_flattened_data() if hasattr(mp, "get_flattened_data") else mp.getdata()), 48, align=True)
+arr("u8", "map_bg", list(town.get_flattened_data() if hasattr(town, "get_flattened_data") else town.getdata()), 48, align=True)
 arr("u32", "map_tiles", [f"0x{w:08X}" for w in map_words], 8)   # arrow, player (16x16 each)
 arr("u8", "forest_bg", list(fd.get_flattened_data() if hasattr(fd, "get_flattened_data") else fd.getdata()), 48, align=True)
 arr("u32", "player_tiles", [f"0x{w:08X}" for w in player_words], 8)   # 16x32: down0 down1 up0 up1 side0 side1
@@ -1168,6 +1267,9 @@ arr("u32", "nature_tiles", [f"0x{w:08X}" for w in nature_words], 8)   # see the 
 arr("u16", "nature_pal", [rgb15(c) for c in NATURE_PAL])
 arr("u16", "player_pal", [rgb15(c) for c in PLAYER_PAL])
 arr("u16", "flower_pals", flower_pals)   # 6 banks of 16: red, blue, yellow, violet, pink, orange
+arr("u8", "mine_bg", list(mn.get_flattened_data() if hasattr(mn, "get_flattened_data") else mn.getdata()), 48, align=True)
+arr("u32", "mine_tiles", [f"0x{w:08X}" for w in mine_words], 8)   # rock, hard rock, ore, hole, pickaxe, sparkle
+arr("u16", "ore_pals", ore_pals)   # 7 banks: sulfur, red, blue, green, cyan, violet, silver
 open(OUT_C, "w").write("\n".join(src) + "\n")
 open(OUT_H, "w").write("\n".join(hdr) + "\n")
 print(f"art: shop palette {len(pal)} colors, {len(cust_words) // 8} customer tiles, {len(FONT_CHARS)} glyphs")

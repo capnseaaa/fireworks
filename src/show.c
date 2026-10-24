@@ -512,7 +512,7 @@ void nightshow_update(u8* back) {
 static int rv_t, rv_phase, rv_stars, rv_ngifts;
 static int rv_start[MAXCRATE];         // frame (of rv_t) each bubble pops; -1 = not yet
 static u8 rv_tier[MAXCRATE];
-static char rv_said[MAXCRATE][28];
+static char rv_said[MAXCRATE][40];      // comments run up to 36 characters
 static char rv_lines[MAXCRATE][3][41];  // rv_said wrapped once, not every frame
 static u8 rv_nlines[MAXCRATE];
 static char rv_gifts[MAXCRATE][41];

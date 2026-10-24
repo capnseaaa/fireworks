@@ -4,7 +4,7 @@ A cozy firework-making game for the Game Boy Advance, played in emulators (built
 
 Planned loop: by day, gather materials around town and sometimes find new patterns. By night, customers ask for fireworks and you build them from a quick menu. At the end of the night, everything you made goes up in a show.
 
-## Current state: v0.6.0, the forest you can walk
+## Current state: v0.7.0, the mine and dev mode
 - **Title:** CONTINUE, NEW GAME, or FREE PLAY (the v0.1 sandbox; SELECT+START returns to the title).
 - **Intro:** you've just taken over Grandma's firework shop in a seaside town. Nine short pages in your own words, with the controls in brackets. START skips it.
 - **Saving:** the game saves itself at the start of every night and every day. CONTINUE picks up there. NEW GAME asks before replacing a save.
@@ -13,8 +13,8 @@ Planned loop: by day, gather materials around town and sometimes find new patter
 - **Review time:** each customer's comment pops up over the town, then the night gets a 0-5 star rating with coins, reputation, and gifts.
 - **Day:** walk the town map from 8:00 AM to 6:00 PM. Every walk (20 min) and job costs time, and each spot works once a day.
   - Forest (EXPLORE): walk around, Stardew style. Chop oaks (several axe swings; shells), search bushes (green stars), pick sparkling flowers (red, blue, yellow, violet, pink, orange stars), clear twigs, weeds, and stones (a pickaxe), and fire the kiln: hold A to keep the heat in the moving green band for powder. The big old tree needs a better axe and may hide a scroll. Flowers and debris come back fresh each day. Walking is free; each action costs a few minutes.
-  - Gear: the axe (3 tiers) and the bag (holds 20, 30, 40 things a day), sold at the market.
-  - Mine: dig sulfur (powder, sometimes red). Deep tunnel needs a pickaxe (blue, cyan, violet, green).
+  - Gear at the market: axe (3 tiers), pickaxe (3 tiers), lantern, bag (holds 20, 30, 40 things a day).
+  - Mine (ENTER THE MINE): Stardew-style floors. Break rocks with the pickaxe; one rock on each floor hides the ladder down. Ore by depth: sulfur (powder), red, and blue near the top; green and cyan from floor 4; violet and silver from floor 7. Hard rock needs a better pickaxe; floors 5-10 need a lantern. The ladder up leaves. CRACK GEODES: stop a swinging pointer on the crack, three geodes a day; dead center gives rare colors.
   - Beach: comb the sand (yellow, orange, gold), driftwood (shells). Tide pools need a net (pink, cyan, blue, scrolls).
   - Quarry: needs a rope (white, silver, scrolls).
   - Market: powder, shells, any colored star, and the tools.
@@ -24,6 +24,9 @@ Planned loop: by day, gather materials around town and sometimes find new patter
 - **Hidden likes:** a customer may secretly love a color, pattern, or size. Hit it (even by accident) and they love it: more coins and rep, plus a gift: colored stars, a tip, or a scroll that teaches a new pattern.
 - You start knowing peony, chrysanthemum, willow, and ring. Scrolls teach the rest.
 - No sound yet.
+
+## Dev mode
+Hold L+R and press B (almost anywhere) for a test menu: +1000 coins, max materials, all patterns, all upgrades and gear, +10 rep, jump to a new day or tonight's shop, set the day clock to 5:50 PM, mark mine floor 9 as reached, or go back to the title.
 
 ## How it draws
 - Mode 4 bitmap, two pages. Up to 1600 particles, simulated and drawn by ARM code in IWRAM (`src/render.c`).
