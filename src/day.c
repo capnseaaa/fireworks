@@ -24,7 +24,7 @@ static const Area areas[A_COUNT] = {
 
 // What you can do at each spot. kind picks the result in do_spot().
 enum { K_OPEN, K_UPGRADE, K_EXPLORE, K_MINE, K_GEODES, K_BEACH,
-       K_CLIMB, K_RUINS, K_BUY_POWDER, K_BUY_SHELLS, K_BUY_STAR, K_BUY_PICK, K_BUY_NET, K_BUY_ROPE, K_BUY_AXE, K_BUY_BAG, K_BUY_LANTERN };
+       K_QUARRY, K_CLIMBMG, K_BUY_POWDER, K_BUY_SHELLS, K_BUY_STAR, K_BUY_PICK, K_BUY_NET, K_BUY_ROPE, K_BUY_AXE, K_BUY_BAG, K_BUY_LANTERN };
 typedef struct { u8 area, kind, minutes, needs, price; const char* name; const char* desc; } Spot;
 static const Spot spots[] = {
     { A_HOME, K_OPEN, 0, 0, 0, "OPEN THE SHOP", "END THE DAY AND OPEN FOR THE NIGHT." },
@@ -33,8 +33,8 @@ static const Spot spots[] = {
     { A_MINE, K_MINE, 0, 0, 0, "ENTER THE MINE", "BREAK ROCKS FOR ORE. ONE ROCK ON EACH FLOOR HIDES THE LADDER DOWN." },
     { A_MINE, K_GEODES, 30, 0, 0, "CRACK GEODES", "THREE GEODES A DAY. STOP THE POINTER ON THE CRACK." },
     { A_BEACH, K_BEACH, 0, 0, 0, "EXPLORE", "ROCKS FULL OF TIDE POOLS: SHELLS, SEA GLASS, CORAL, AMBER. A NET REACHES INTO THE POOLS." },
-    { A_QUARRY, K_CLIMB, 90, TOOL_ROPE, 0, "CLIMB DOWN", "WHITE AND SILVER STONE. NEEDS A ROPE." },
-    { A_QUARRY, K_RUINS, 60, TOOL_ROPE, 0, "OLD WORKSHOP", "A RUINED FIREWORK WORKSHOP. NEEDS A ROPE." },
+    { A_QUARRY, K_QUARRY, 0, TOOL_ROPE, 0, "EXPLORE", "A STEPPED STONE PIT: WHITE STONE, SILVER, GOLD, OLD CRATES. NEEDS A ROPE." },
+    { A_QUARRY, K_CLIMBMG, 30, TOOL_ROPE, 0, "CLIMB THE CLIFF", "PRESS THE HOLDS AS THEY LIGHT UP. THE HIGHER, THE BETTER. NEEDS A ROPE." },
     { A_MARKET, K_BUY_POWDER, 10, 0, 12, "3 POWDER", "THREE SCOOPS OF BLACK POWDER." },
     { A_MARKET, K_BUY_SHELLS, 10, 0, 15, "2 SHELLS", "TWO PAPER SHELLS, READY TO FILL." },
     { A_MARKET, K_BUY_STAR, 10, 0, 8, "1 STAR", "ONE COLORED STAR. PICK THE COLOR." },
@@ -111,6 +111,8 @@ static const char* blocked(int i) {
     if ((s->kind == K_BUY_AXE || s->kind == K_BUY_BAG || s->kind == K_BUY_PICK || s->kind == K_BUY_LANTERN) && !price_of(i))
         return "YOU HAVE THE BEST ONE";
     if (s->kind == K_GEODES && geodes_done()) return "DONE FOR TODAY";
+    if (s->kind == K_CLIMBMG && climb_done()) return "DONE FOR TODAY";
+    if (s->kind == K_QUARRY && (tools & TOOL_ROPE)) return day_min >= DAY_END ? "NOT ENOUGH DAYLIGHT" : 0;
     if (s->needs && !(tools & s->needs))
         return s->needs == TOOL_NET ? "NEEDS A NET" : "NEEDS A ROPE";
     if (is_tool(s->kind) && (tools & tool_bit(s->kind))) return "YOU HAVE ONE";
@@ -134,39 +136,8 @@ static char* time_str(char* p, int m) {
 
 // --- results ---------------------------------------------------------------------
 
-static char* add_stars(char* p, const u8* pool, int npool, int n) {
-    for (int i = 0; i < n; i++) {
-        int h = pool[rnd() % npool];
-        stock[h]++;
-        if (i) p = cat(p, ", ");
-        p = cat(p, "1 ");
-        p = cat(p, hue_names[h]);
-    }
-    return cat(p, n == 1 ? " STAR" : " STARS");
-}
-
-static char* maybe_scroll(char* p, int chance) {
-    if ((int)(rnd() % 100) >= chance) return p;
-    int pat = unlock_pattern();
-    if (pat < 0) return p;
-    p = cat(p, "\nAND A SCROLL! YOU CAN NOW MAKE ");
-    p = cat(p, pat_plural[pat]);
-    return cat(p, "!");
-}
-
 static void do_spot(int i) {
-    static const u8 pale[] = { H_WHITE, H_SILVER }, odd[] = { H_PINK, H_VIOLET, H_SILVER };
-    char* p = cat(msg, "YOU GOT ");
     switch (spots[i].kind) {
-    case K_CLIMB:
-        p = add_stars(p, pale, 2, 2);
-        p = cat(p, ".");
-        maybe_scroll(p, 20);
-        break;
-    case K_RUINS:
-        if (rnd() % 100 < 40 && unlock_count() < P_COUNT) { cat(msg, "NOTHING BUT DUST..."); maybe_scroll(msg + 18, 100); }
-        else { p = add_stars(p, odd, 3, 1); cat(p, "."); }
-        break;
     case K_BUY_POWDER: powder += 3; cat(msg, "YOU BOUGHT 3 POWDER."); break;
     case K_BUY_SHELLS: shells += 2; cat(msg, "YOU BOUGHT 2 SHELLS."); break;
     case K_BUY_PICK: gear[GEAR_PICK]++; cat(msg, gear[GEAR_PICK] == 1 ? "A PICKAXE! TIME TO TRY THE MINE." : "A BETTER PICKAXE! ROCKS BREAK FASTER."); break;
@@ -289,6 +260,8 @@ static void step(void) {
         if (spots[i].kind == K_EXPLORE) { field_go(FIELD_FOREST); break; }
         if (spots[i].kind == K_MINE) { field_go(FIELD_MINE); break; }
         if (spots[i].kind == K_BEACH) { field_go(FIELD_BEACH); break; }
+        if (spots[i].kind == K_QUARRY) { field_go(FIELD_QUARRY); break; }
+        if (spots[i].kind == K_CLIMBMG) { field_go(FIELD_CLIMB); break; }
         if (spots[i].kind == K_GEODES) { field_go(FIELD_GEODES); break; }
         if (spots[i].kind == K_BUY_STAR) { go(DS_COLOR); cursor = 0; break; }
         work_spot = i;

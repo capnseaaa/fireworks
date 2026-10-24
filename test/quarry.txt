@@ -1,0 +1,151 @@
+# Dev mode -> all gear -> new day -> the quarry.
+# Dev mode -> all gear -> new day -> the mine. (Phase 1: dump floor 1's rocks.)
+40 0 v_title.ppm
+1 768
+1 770
+1 768
+1 0
+10 0 v_dev.ppm
+1 128
+1 0
+1 128
+1 0
+1 128
+1 0
+1 1
+1 0
+1 128
+1 0
+1 128
+1 0
+1 1
+1 0
+20 0
+1 1
+1 0
+5 0
+1 64
+1 0
+5 0
+1 1
+1 0
+5 0
+1 0 q_area.ppm
+1 1
+1 0
+30 0 q_enter.ppm
+1 0 @$scene,$field_area,$nnodes
+1 0 !$px=53,$py=95,$face=1
+2 0
+1 1
+1 0
+16 0
+1 1
+1 0
+16 0
+1 1
+1 0
+16 0
+1 1
+1 0
+16 0
+1 0 !$px=156,$py=161,$face=1
+2 0
+1 1
+1 0
+16 0
+1 1
+1 0
+16 0
+1 1
+1 0
+16 0
+1 1
+1 0
+16 0
+1 0 !$px=203,$py=109,$face=1
+2 0
+1 1
+1 0
+16 0
+1 1
+1 0
+16 0
+1 1
+1 0
+16 0
+1 1
+1 0
+16 0
+1 0 !$px=219,$py=144,$face=1
+2 0
+1 1
+1 0
+16 0
+1 1
+1 0
+16 0
+1 1
+1 0
+16 0
+1 1
+1 0
+16 0
+1 0 q_after.ppm
+1 0 @$stock+40,$stock+44,$stock+8,$bag_used,$day_min,$known
+1 0 !$px=211,$py=30,$face=1
+2 0
+20 64
+1 0 @$scene,$day_st
+1 128
+1 0
+1 1
+1 0
+20 0 q_climb0.ppm
+1 0 !$climb_key=2
+1 64
+1 0
+4 0
+1 0 !$climb_key=2
+1 64
+1 0
+4 0
+1 0 !$climb_key=2
+1 64
+1 0
+4 0
+1 0 !$climb_key=2
+1 64
+1 0
+4 0
+1 0 !$climb_key=2
+1 64
+1 0
+4 0
+1 0 !$climb_key=2
+1 64
+1 0
+4 0
+1 0 q_climb5.ppm
+1 0 !$climb_key=2
+1 64
+1 0
+4 0
+1 0 !$climb_key=2
+1 64
+1 0
+4 0
+1 0 !$climb_key=2
+1 64
+1 0
+4 0
+1 0 !$climb_key=2
+1 64
+1 0
+4 0
+5 0 q_climbtop.ppm
+1 0 @$scene,$climb_day,$stock+40,$stock+44,$stock+8
+1 1
+1 0
+20 0
+1 0 @$scene,$day_st,$day_min

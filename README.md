@@ -4,7 +4,7 @@ A cozy firework-making game for the Game Boy Advance, played in emulators (built
 
 Planned loop: by day, gather materials around town and sometimes find new patterns. By night, customers ask for fireworks and you build them from a quick menu. At the end of the night, everything you made goes up in a show.
 
-## Current state: v0.8.0, the tide pools
+## Current state: v0.9.0, the quarry
 - **Title:** CONTINUE, NEW GAME, or FREE PLAY (the v0.1 sandbox; SELECT+START returns to the title).
 - **Intro:** you've just taken over Grandma's firework shop in a seaside town. Nine short pages in your own words, with the controls in brackets. START skips it.
 - **Saving:** the game saves itself at the start of every night and every day. CONTINUE picks up there. NEW GAME asks before replacing a save.
@@ -16,7 +16,7 @@ Planned loop: by day, gather materials around town and sometimes find new patter
   - Gear at the market: axe (3 tiers), pickaxe (3 tiers), lantern, bag (holds 20, 30, 40 things a day).
   - Mine (ENTER THE MINE): Stardew-style floors. Break rocks with the pickaxe; one rock on each floor hides the ladder down. Ore by depth: sulfur (powder), red, and blue near the top; green and cyan from floor 4; violet and silver from floor 7. Hard rock needs a better pickaxe; floors 5-10 need a lantern. The ladder up leaves. CRACK GEODES: stop a swinging pointer on the crack, three geodes a day; dead center gives rare colors.
   - Beach (EXPLORE): a rocky coast of tide pools on three terraces stepping down to the sea, joined by worn ramps; the way down is a wooden stair in the top-left corner. Finds wash up on the rocks each day: scallops (pink, white), sea glass (cyan, green, blue), coral (red, orange), amber (gold), salt crystals (yellow), driftwood (shells). The pools need a net (pink, cyan, blue, sometimes a bottle with a scroll). From the rocky point, CATCH DRIFTWOOD: drop the hook on the logs that float past (six casts a day; bottles hold scrolls).
-  - Quarry: needs a rope (white, silver, scrolls).
+  - Quarry (EXPLORE, needs the rope): a stepped stone pit, terraces of cut stone winding down to a pond, with an old workshop shed and a rusted crane on the rim. Break white stone (white stars), gold-flecked stone (gold), and silver (deeper down; needs pickaxe II); search old crates for scrolls or odd stars. CLIMB THE CLIFF: press the hold shown (L, R, or UP) before it fades; higher means more stars, and an eagle's nest at the top may hold a scroll.
   - Market: powder, shells, any colored star, and the tools.
   - START opens the bag. Home opens the shop for the night.
 - **Upgrades** (Home > IMPROVE THE SHOP, during the day): Workbench (3 levels, 15% faster each), Late Hours (2 levels, open until 2 then 3 AM), Shop Sign (2 levels, 15% more pay each), Display Shelf (you notice what customers secretly love). The top levels need a reputation title.

@@ -1500,6 +1500,160 @@ for gem, light in BEACH_COLORS:
     pal_[3], pal_[4] = gem, light
     beach_pals += [rgb15_early(c) for c in pal_]
 
+
+# ---- the quarry: a stepped stone pit ------------------------------------------------------
+# Concentric terraces of pale cut stone stepping down to a pond, with walls where a level
+# drops away and ramps between levels. A rope ladder at the top-right rim is the way in and
+# out; an old workshop shed sits on the rim. Exports the picture, a per-pixel walk mask,
+# and the shed's crate spots.
+qy = Image.new("P", (W, H), M["r2"])
+mp, mpx, md = qy, qy.load(), ImageDraw.Draw(qy)
+mrng = random.Random(91)
+QCX, QCY = 112, 100
+
+
+def qlevel(x, y):                               # 3 rim, 2, 1, 0 pit floor
+    a = math.atan2(y - QCY, x - QCX)
+    d = math.sqrt(((x - QCX) / 118.0) ** 2 + ((y - QCY) / 74.0) ** 2) * (1 + 0.05 * math.sin(a * 4 + 1))
+    return 3 if d > 0.98 else 2 if d > 0.72 else 1 if d > 0.46 else 0
+
+
+QRAMPS = [((180, 196), (2, 3)), ((40, 56), (1, 2)), ((104, 118), (0, 1))]   # x span, between levels: round the pit
+
+
+def q_ramp(x, a, b, y=0):                       # ramps are cut into the pit's north walls only
+    return y < QCY and any(x0 <= x <= x1 and {a, b} == set(pair) for (x0, x1), pair in QRAMPS)
+
+
+QFACE = 10
+qlv = [[qlevel(x, y) for x in range(W)] for y in range(H)]
+qface = [[0] * W for _ in range(H)]
+qface_from = [[0] * W for _ in range(H)]
+for y in range(12, H):
+    for x in range(W):
+        for k in range(1, QFACE + 1):
+            if y - k >= 12 and qlv[y - k][x] > qlv[y][x]:
+                qface[y][x] = k
+                qface_from[y][x] = qlv[y - k][x]
+                break
+qpts = []
+while len(qpts) < 90:                           # rock seeds, kept apart so no cell collapses to a crack
+    p = (mrng.randrange(-10, 250), mrng.randrange(8, 170))
+    if all((p[0] - a) ** 2 + (p[1] - b) ** 2 > 12 ** 2 for a, b in qpts): qpts.append(p)
+QTOPS = {3: ("wl0", "wl1", "r2"), 2: ("r3", "wl1", "r2"), 1: ("r3", "r2", "r1"), 0: ("r2", "r1", "r0")}
+for y in range(12, H):
+    for x in range(W):
+        L = qlv[y][x]
+        k = qface[y][x]
+        if k:
+            if q_ramp(x, L, qface_from[y][x], y):       # cut steps down the ramp
+                P(x, y, "r3" if k % 3 == 1 else "r2" if k % 3 == 2 else "r1")
+                continue
+            c = "r2" if k < 3 else "r1" if k < QFACE - 2 else "r0"   # a cut wall: drill marks, block lines
+            if (y + k) % 5 == 0: c = "r1" if c == "r2" else "r0"
+            if x % 9 == 0: c = "r0"
+            if k == 1: c = "ol"
+            P(x, y, c)
+            continue
+        ds = sorted(((x - a) ** 2 + ((y - b) * 1.6) ** 2, i) for i, (a, b) in enumerate(qpts))
+        d0 = math.sqrt(ds[0][0]); gap = math.sqrt(ds[1][0]) - d0
+        hi, mid, lo = QTOPS[L]
+        if gap < 1.0: P(x, y, "ol" if L < 3 else "r1"); continue
+        ax, ay = qpts[ds[0][1]]
+        sh = -((x - ax) + (y - ay) * 1.6) / (d0 + gap + 0.01) + (mrng.random() - 0.5) * 0.4
+        P(x, y, hi if sh > 0.4 else mid if sh > -0.4 else lo)
+        if any(y - j >= 12 and qface[y - j][x] and not q_ramp(x, qlv[y - j][x], qface_from[y - j][x], y - j) for j in (1, 2, 3)):
+            P(x, y, "r1" if L > 0 else "r0")             # shadow just below a wall
+# The pond at the bottom of the pit.
+pond = [(x, y) for y in range(QCY - 8, QCY + 12) for x in range(QCX - 22, QCX + 23)
+        if ((x - QCX) / 22) ** 2 + ((y - QCY - 2) / 10) ** 2 <= 1 + 0.1 * math.sin(x / 3.0)]
+pond_set = set(pond)
+for (x, y) in pond:
+    d = ((x - QCX) / 22) ** 2 + ((y - QCY - 2) / 10) ** 2
+    c = "wd" if d < 0.3 else "w0" if d < 0.75 else "w1"
+    if (x - 1, y) not in pond_set or (x, y - 1) not in pond_set: c = "cave"
+    P(x, y, c)
+P(QCX + 6, QCY - 1, "w3"); P(QCX + 7, QCY - 1, "w3"); P(QCX - 9, QCY + 4, "w3")
+# Grass and scrub creeping over the rim.
+for y in range(12, H):
+    for x in range(W):
+        if qlv[y][x] == 3 and not qface[y][x] and noise(x, y + 70, 9) > 0.35 + (mrng.random() - 0.5) * 0.4:
+            P(x, y, "g1" if mrng.random() < 0.7 else "g2")
+# Rubble along the walls' feet, and drill holes.
+for _ in range(80):
+    x, y = mrng.randrange(W), mrng.randrange(20, H)
+    if not qface[y][x] and qlv[y][x] < 3: P(x, y, mrng.choice(["r3", "r1", "ol"]))
+# The old workshop shed on the rim, top left.
+house(40, 34, 22, 11, "bl", chimney=False)
+crate(66, 26); crate(70, 31)
+# A rusted crane arm over the pit, top middle.
+for y in range(14, 36): P(150, y, "wd1"); P(151, y, "wd0"); P(149, y, "ol"); P(152, y, "ol")
+for x in range(126, 152): P(x, 15, "wd1"); P(x, 14, "ol"); P(x, 16, "ol")
+for y in range(16, 30): P(128, y, "iron")
+for x in range(125, 132): P(x, 30, "r1"); P(x, 31, "r0")
+# The rope ladder, top right.
+for y in range(12, 46):
+    P(206, y, "t1"); P(216, y, "t1"); P(205, y, "ol"); P(217, y, "ol")
+    if y % 5 == 0:
+        for x in range(207, 216): P(x, y, "wd2")
+md.rectangle((0, 0, W - 1, 10), fill=M["bar"])
+md.line((0, 11, W - 1, 11), fill=M["frame"])
+qy.putpalette(flat + [0] * (768 - len(flat)))
+qy.convert("RGB").save(os.path.join(PREVIEW, "quarry_preview.png"))
+
+# Walk mask: walls (faces, level edges) block except on ramps; the pond, the shed, and the
+# crane's foot block. Checked for reachability from the ladder.
+qmask = [[0] * W for _ in range(H)]
+for y in range(12, H):
+    for x in range(W):
+        if 204 <= x <= 218 and y < 48: qmask[y][x] = 1; continue
+        L = qlv[y][x]
+        if (x, y) in pond_set: continue
+        if qface[y][x] and not q_ramp(x, L, qface_from[y][x], y): continue
+        if (27 <= x <= 53 and y < 37) or (63 <= x <= 79 and y < 39): continue   # the shed and crates
+        if 147 <= x <= 153 and 30 <= y < 38: continue  # the crane's foot
+        edge = False
+        for dx, dy in ((-2, 0), (2, 0), (0, -2), (0, 2), (-1, -1), (1, 1), (1, -1), (-1, 1)):
+            xx, yy = x + dx, y + dy
+            if 0 <= xx < W and 12 <= yy < H and qlv[yy][xx] != L and not q_ramp(x, L, qlv[yy][xx], y):
+                edge = True
+        if not edge: qmask[y][x] = 1
+seen = [[False] * W for _ in range(H)]
+q = deque([(211, 40)]); seen[40][211] = True
+while q:
+    x, y = q.popleft()
+    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+        xx, yy = x + dx, y + dy
+        if 0 <= xx < W and 12 <= yy < H and qmask[yy][xx] and not seen[yy][xx]:
+            seen[yy][xx] = True; q.append((xx, yy))
+levels_reached = sorted({qlv[y][x] for y in range(H) for x in range(W) if seen[y][x]})
+print("quarry: levels reachable from the ladder:", levels_reached)
+for y in range(H):
+    for x in range(W):
+        if qmask[y][x] and not seen[y][x]: qmask[y][x] = 0
+quarry_mask = []
+for i in range(0, W * H, 8):
+    byte = 0
+    for b in range(8):
+        x, y = (i + b) % W, (i + b) // W
+        byte |= qmask[y][x] << b
+    quarry_mask.append(byte)
+mimg = Image.new("RGB", (W, H))
+for y in range(H):
+    for x in range(W):
+        mimg.putpixel((x, y), (60, 200, 90) if qmask[y][x] else (0, 0, 0))
+Image.blend(qy.convert("RGB"), mimg, 0.45).resize((W * 3, H * 3), Image.NEAREST).save(os.path.join(PREVIEW, "quarry_walk.png"))
+# Where things can go: walkable spots on each level (for the game's random placement).
+quarry_spots = []
+for (x, y) in [(mrng.randrange(10, 230), mrng.randrange(40, 156)) for _ in range(4000)]:
+    if all(qmask[y][x + dx] for dx in (-6, -3, 0, 3, 6) if 0 <= x + dx < W) and qmask[y - 8][x] and len(quarry_spots) < 80:
+        if all((x - a) ** 2 + (y - b) ** 2 > 14 ** 2 for a, b, _ in quarry_spots):
+            quarry_spots.append((x, y, qlv[y][x]))
+print("quarry: spots", len(quarry_spots))
+crate_spr = grid_image(pad16(["................", "................", "..111111111111..", "..1bbbbbbbbbb1..",
+                              "..1b77777777b1..", "..1b76666667b1..", "..1b77777777b1..", "..1b76666667b1..",
+                              "..1b77777777b1..", "..1bbbbbbbbbb1..", "..111111111111..", "..888888888888..",
+                              "................"], 16))
 # ---- write art.c / art.h ----------------------------------------------------------
 
 
@@ -1555,6 +1709,11 @@ hdr.append(f"#define HOOK_SPOT_X {HOOK[0]}")
 hdr.append(f"#define HOOK_SPOT_Y {HOOK[1] - 2}")
 arr("u32", "beach_tiles", [f"0x{w:08X}" for w in beach_words], 8)   # scallop, glass, coral, crystal, driftwood
 arr("u16", "beach_pals", beach_pals)   # 9 banks: pink, white, cyan, green, blue, red, orange, gold, yellow
+arr("u8", "quarry_bg", list(qy.get_flattened_data() if hasattr(qy, "get_flattened_data") else qy.getdata()), 48, align=True)
+arr("u8", "quarry_mask", quarry_mask, 30)   # one bit per pixel: 1 = walkable
+arr("u8", "quarry_spots", [v for t in quarry_spots for v in t], 24)   # x, y, level
+hdr.append(f"#define QUARRY_SPOTS {len(quarry_spots)}")
+arr("u32", "crate_tiles", [f"0x{w:08X}" for w in tiles_4bpp(crate_spr, 2, 2)], 8)
 open(OUT_C, "w").write("\n".join(src) + "\n")
 open(OUT_H, "w").write("\n".join(hdr) + "\n")
 print(f"art: shop palette {len(pal)} colors, {len(cust_words) // 8} customer tiles, {len(FONT_CHARS)} glyphs")
