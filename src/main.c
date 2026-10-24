@@ -18,6 +18,8 @@ void sprite(int x, int y, int tile, int shape, int size, int pal) {
     o[2] = tile | (pal << 12);
 }
 
+void sprite_flip_last(void) { if (noam) oam[(noam - 1) * 4 + 1] |= 1 << 12; }
+
 void set_scene(int s) { next_scene = s; }
 
 // Scene loads change palettes and sprite tiles; keep the screen dark until the new
@@ -38,6 +40,7 @@ static void enter(int s) {
     REG_BG2X = 0;                  // no leftover screen shake
     if (s == SC_SHOP) shop_enter();
     else if (s == SC_DAY) day_enter();
+    else if (s == SC_FIELD) field_enter();
     else if (s == SC_TITLE || s == SC_FREE || s == SC_SHOW) show_enter();
     else if (s == SC_INTRO) { show_enter(); intro_begin(); }
     else if (s == SC_REVIEW) {
@@ -73,7 +76,7 @@ int main(void) {
         if (blank_frames && --blank_frames == 0) REG_DISPCNT &= ~0x80;
         u8* back = page ? PAGE1 : PAGE0;
         for (int i = 0; i < 128 * 4; i++) OAM[i] = oam[i];
-        if (scene != SC_SHOP) show_vblank();
+        if (scene != SC_SHOP && scene != SC_DAY && scene != SC_FIELD) show_vblank();   // the sky's light and shake
 
         REG_TM2CNT = 0; REG_TM2D = 0; REG_TM2CNT = 0x81;   // time this frame's work
         frame++;
@@ -93,6 +96,7 @@ int main(void) {
         case SC_SHOW: nightshow_update(back); break;
         case SC_REVIEW: review_update(back); break;
         case SC_DAY: day_update(back); break;
+        case SC_FIELD: field_update(back); break;
         case SC_INTRO: intro_update(back); break;
         }
         for (int i = noam; i < 128; i++) { oam[i * 4] = 0x200; oam[i * 4 + 1] = 0; oam[i * 4 + 2] = 0; }

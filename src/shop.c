@@ -64,6 +64,8 @@ void new_game(void) {
     known = (1 << P_PEONY) | (1 << P_CHRYS) | (1 << P_WILLOW) | (1 << P_RING);
     tools = 0;
     for (int i = 0; i < UPG_COUNT; i++) upg[i] = 0;
+    gear[GEAR_AXE] = 1;
+    gear[GEAR_BAG] = 1;
     ncrate = 0;
 }
 
@@ -892,7 +894,8 @@ void shop_update(u8* back) {
 // night and each day; CONTINUE picks up there.
 
 #define SRAM ((volatile u8*)0x0E000000)
-#define SAVE_MAGIC 0x46575232u          // "FWR2" (v0.5: upgrades)
+#define SAVE_MAGIC 0x46575233u          // "FWR3" (v0.6: gear)
+#define SAVE_MAGIC_V2 0x46575232u       // "FWR2" (v0.5): still loads, gear starts at tier 1
 #define SAVE_MAGIC_V1 0x46575231u       // "FWR1" (v0.4): still loads, upgrades start at 0
 __attribute__((used, aligned(4))) static const char save_tag[] = "SRAM_V113";
 
@@ -905,8 +908,19 @@ typedef struct {
     s32 stock[NCOLORS];
     u16 known, pad2;
     u8 upg[UPG_COUNT];
+    u8 gear[GEAR_COUNT], pad3[2];
     u32 sum;
 } Save;
+
+typedef struct {                       // v0.5
+    u32 magic;
+    u8 phase, pad[3];
+    s32 night, coins, rep, powder, shells, tools, last_stars;
+    s32 stock[NCOLORS];
+    u16 known, pad2;
+    u8 upg[UPG_COUNT];
+    u32 sum;
+} SaveV2;
 
 typedef struct {                       // v0.4.0
     u32 magic;
@@ -936,6 +950,7 @@ void save_game(int phase) {
     s.tools = tools; s.last_stars = last_stars; s.known = known;
     for (int i = 0; i < NCOLORS; i++) s.stock[i] = stock[i];
     for (int i = 0; i < UPG_COUNT; i++) s.upg[i] = upg[i];
+    for (int i = 0; i < GEAR_COUNT; i++) s.gear[i] = gear[i];
     s.sum = save_sum(&s);
     for (unsigned i = 0; i < sizeof s; i++) SRAM[i] = b[i];
 }
@@ -945,6 +960,19 @@ static int read_save(Save* s) {
     u8* b = (u8*)s;
     for (unsigned i = 0; i < sizeof *s; i++) b[i] = SRAM[i];
     if (s->magic == SAVE_MAGIC) return s->sum == save_sum(s);
+    for (int i = 0; i < GEAR_COUNT; i++) s->gear[i] = 1;   // older saves: starting gear
+    if (s->magic == SAVE_MAGIC_V2) {
+        SaveV2 old;
+        u8* o = (u8*)&old;
+        for (unsigned i = 0; i < sizeof old; i++) o[i] = SRAM[i];
+        if (old.sum != checksum(&old, sizeof old)) return 0;
+        s->phase = old.phase;
+        s->night = old.night; s->coins = old.coins; s->rep = old.rep; s->powder = old.powder;
+        s->shells = old.shells; s->tools = old.tools; s->last_stars = old.last_stars; s->known = old.known;
+        for (int i = 0; i < NCOLORS; i++) s->stock[i] = old.stock[i];
+        for (int i = 0; i < UPG_COUNT; i++) s->upg[i] = old.upg[i];
+        return 1;
+    }
     if (s->magic == SAVE_MAGIC_V1) {
         SaveV1 old;
         u8* o = (u8*)&old;
@@ -974,5 +1002,6 @@ int load_game(void) {
     tools = s.tools; last_stars = s.last_stars; known = s.known;
     for (int i = 0; i < NCOLORS; i++) stock[i] = s.stock[i];
     for (int i = 0; i < UPG_COUNT; i++) upg[i] = s.upg[i];
+    for (int i = 0; i < GEAR_COUNT; i++) gear[i] = s.gear[i] ? s.gear[i] : 1;
     return s.phase;
 }

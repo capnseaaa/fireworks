@@ -797,6 +797,334 @@ for g in (ARROW, PLAYER):
             p[x, y] = int(ch) if ch.isdigit() else 0
     map_words += tiles_4bpp(im, 2, 2)
 
+# ---- forest field (walk around and gather) --------------------------------------------
+# Same palette as the town map. Dense trees close in the edges; the clearing is open
+# ground for the trees, bushes, and kiln the game places as sprites. The path out is at
+# the bottom.
+fd = Image.new("P", (W, H), M["g1"])
+mp, mpx, md = fd, fd.load(), ImageDraw.Draw(fd)   # the map helpers draw into whatever these are
+mrng = random.Random(23)
+for y in range(12, H):
+    for x in range(W):
+        n = noise(x + 300, y, 10) + (mrng.random() - 0.5) * 0.35
+        P(x, y, "g0" if n < -0.6 else "g1" if n < 0.2 else "g2" if n < 0.85 else "g3")
+for _ in range(220):
+    x, y = mrng.randrange(W), mrng.randrange(14, H)
+    P(x, y, "gsh"); P(x + 2, y, "gsh"); P(x + 1, y + 1, "gsh")
+for _ in range(16):
+    cx, cy = mrng.randrange(30, 210), mrng.randrange(40, 150)
+    col = mrng.choice(["fl_y", "fl_p", "fl_w"])
+    for _ in range(4):
+        x, y = cx + mrng.randint(-3, 3), cy + mrng.randint(-2, 2)
+        P(x, y + 1, "gsh"); P(x, y, col)
+# The path out (bottom middle) and a worn patch in the clearing.
+path_px = set()
+for y in range(96, H):
+    w = 9 + int(2 * math.sin(y / 7.0))
+    for x in range(120 - w, 120 + w):
+        path_px.add((x, y))
+for y in range(82, 100):
+    for x in range(88, 152):
+        if ((x - 120) / 32) ** 2 + ((y - 92) / 10) ** 2 <= 1:
+            path_px.add((x, y))
+for (x, y) in path_px:
+    edge = any((x + dx, y + dy) not in path_px for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)))
+    P(x, y, "p1" if edge else ("p0" if mrng.random() > 0.08 else "p3"))
+# A little pond in the top-left corner.
+pond = [(x, y) for y in range(22, 42) for x in range(24, 62) if ((x - 43) / 18) ** 2 + ((y - 32) / 9) ** 2 <= 1]
+for (x, y) in pond:
+    P(x, y, "w1" if (x + y * 2) % 13 else "w2")
+outline_region(pond, "wd")
+for (x, y) in ((34, 30), (50, 34), (44, 27)):
+    P(x, y, "w3"); P(x + 1, y, "w3")
+# The wall of trees around the edges (not walkable), back rows first.
+edge_trees = []
+for x in range(-6, W + 8, 13):
+    edge_trees.append((x + mrng.randint(-3, 3), 16 + mrng.randint(-3, 4), mrng.choice((9, 10, 11))))
+for y in range(30, 150, 13):
+    edge_trees.append((4 + mrng.randint(-4, 3), y + mrng.randint(-3, 3), mrng.choice((8, 9, 10))))
+    edge_trees.append((236 + mrng.randint(-3, 4), y + mrng.randint(-3, 3), mrng.choice((8, 9, 10))))
+for x in list(range(-4, 96, 14)) + list(range(150, W + 8, 14)):
+    edge_trees.append((x + mrng.randint(-3, 3), 156 + mrng.randint(-2, 3), mrng.choice((9, 10))))
+for (x, y, r) in sorted(edge_trees, key=lambda t: t[1]):
+    if 62 < x < 70 and y < 30: continue          # keep the pond visible
+    round_tree(x, y, r)
+for (x, y) in ((70, 140), (176, 146), (200, 40), (30, 70)):
+    rock(x, y)
+md.rectangle((0, 0, W - 1, 10), fill=M["bar"])
+md.line((0, 11, W - 1, 11), fill=M["frame"])
+fd.convert("RGB") if False else None
+flat = []
+for c in [(0, 0, 0)] * 16 + mpal:
+    flat += list(c)
+fd.putpalette(flat + [0] * (768 - len(flat)))
+fd.convert("RGB").save(os.path.join(PREVIEW, "forest_preview.png"))
+
+# ---- field sprites --------------------------------------------------------------------
+# Player (OBJ palette bank 0): 1 outline, 2 skin, 3 skin shade, 4 hair, 5 hair shade,
+# 6 shirt, 7 shirt shade, 8 pants, 9 shoes, 10 white.
+PLAYER_FRAMES = {
+    "down0": ["................", ".....111111.....", "....14444441....", "...1444444441...", "...1444444441...",
+              "...1454444541...", "...1422222241...", "...1212222121...", "....12222221....", ".....166661.....",
+              "....16666671....", "...1266666721...", "...1216666121...", "....18888881....", "....188..881....", "....11....11...."],
+    "down1": ["................", ".....111111.....", "....14444441....", "...1444444441...", "...1444444441...",
+              "...1454444541...", "...1422222241...", "...1212222121...", "....12222221....", ".....166661.....",
+              "....16666671....", "...1266666721...", "...1216666121...", "....18888881....", ".....18888.1....", ".....11..11....."],
+    "up0":   ["................", ".....111111.....", "....14444441....", "...1444444441...", "...1444444441...",
+              "...1444444441...", "...1454444541...", "...1445555441...", "....14444441....", ".....177771.....",
+              "....17777771....", "...1277777721...", "...1217777121...", "....18888881....", "....188..881....", "....11....11...."],
+    "up1":   ["................", ".....111111.....", "....14444441....", "...1444444441...", "...1444444441...",
+              "...1444444441...", "...1454444541...", "...1445555441...", "....14444441....", ".....177771.....",
+              "....17777771....", "...1277777721...", "...1217777121...", "....18888881....", ".....18888.1....", ".....11..11....."],
+    "side0": ["................", ".....11111......", "....1444441.....", "...144444441....", "...144444441....",
+              "...144444451....", "...122224451....", "...121224441....", "....12222241....", ".....166661.....",
+              "....1666671.....", "....1666721.....", "....1666121.....", "....1888881.....", "....188.881.....", "....11...11....."],
+    "side1": ["................", ".....11111......", "....1444441.....", "...144444441....", "...144444441....",
+              "...144444451....", "...122224451....", "...121224441....", "....12222241....", ".....166661.....",
+              "....1666671.....", "....1666721.....", "....1666121.....", "....1888881.....", ".....18881......", ".....1111......."],
+}
+
+
+def grid_image(rows):
+    w, h = len(rows[0]), len(rows)
+    im = Image.new("P", (w, h), 0)
+    p = im.load()
+    for y in range(h):
+        for x in range(w):
+            ch = rows[y][x]
+            p[x, y] = int(ch, 16) if ch not in ". " else 0
+    return im
+
+
+player_words = []
+for name in ("down0", "down1", "up0", "up1", "side0", "side1"):
+    player_words += tiles_4bpp(grid_image(PLAYER_FRAMES[name]), 2, 2)
+
+# Nature (OBJ palette bank 1): 1 outline, 2 leaf dark, 3 leaf, 4 leaf mid, 5 leaf light,
+# 6 bark dark, 7 bark, 8 shadow, 9 berry, 10 sparkle, 11 cut wood, 12 stone, 13 stone dark,
+# 14 fire, 15 fire light.
+def sprite_canvas(w, h):
+    im = Image.new("P", (w, h), 0)
+    return im, im.load()
+
+
+def outline_sprite(p, w, h):
+    edge = []
+    for y in range(h):
+        for x in range(w):
+            if p[x, y] == 0 and any(0 <= x + dx < w and 0 <= y + dy < h and p[x + dx, y + dy] not in (0, 1, 8)
+                                     for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))):
+                edge.append((x, y))
+    for (x, y) in edge:
+        p[x, y] = 1
+
+
+def canopy(p, cx, cy, r, rng):
+    for y in range(int(cy - r - 2), int(cy + r + 2)):
+        for x in range(int(cx - r - 2), int(cx + r + 2)):
+            dx, dy = (x - cx) / r, (y - cy) / r
+            bump = 0.1 * math.sin(math.atan2(dy, dx) * 6 + cx)
+            if dx * dx + dy * dy <= (1 + bump) ** 2:
+                l = -(dx * 0.7 + dy * 0.7) + (rng.random() - 0.5) * 0.45
+                p[x, y] = 5 if l > 0.75 else 4 if l > 0.15 else 3 if l > -0.55 else 2
+
+
+def tree_sprite(w, h, r, trunk_w, rng, hollow=False):
+    im, p = sprite_canvas(w, h)
+    cx = w // 2
+    for y in range(h - 4, h):                     # shadow
+        for x in range(w):
+            if ((x - cx) / (w * 0.42)) ** 2 + ((y - (h - 2.5)) / 2) ** 2 <= 1: p[x, y] = 8
+    for y in range(int(r * 1.5), h - 3):          # trunk
+        for x in range(cx - trunk_w // 2, cx + (trunk_w + 1) // 2):
+            p[x, y] = 7 if x < cx + trunk_w // 4 else 6
+    if hollow:
+        for y in range(h - 14, h - 8):
+            for x in range(cx - 3, cx + 3): p[x, y] = 1
+    canopy(p, cx, r + 2, r, rng)
+    outline_sprite(p, w, h)
+    return im
+
+
+srng = random.Random(5)
+oak = tree_sprite(32, 32, 11, 6, srng)
+bigtree = tree_sprite(64, 64, 24, 12, srng, hollow=True)
+for x in (20, 23, 40, 43):                         # roots on the old tree
+    for k in range(3):
+        bigtree.load()[x + (k if x < 32 else -k), 60 + k] = 6
+
+stump, sp = sprite_canvas(16, 16)
+for y in range(13, 16):
+    for x in range(16):
+        if ((x - 8) / 7) ** 2 + ((y - 14) / 1.8) ** 2 <= 1: sp[x, y] = 8
+for y in range(8, 14):
+    for x in range(4, 12): sp[x, y] = 7 if x < 9 else 6
+for y in range(6, 10):
+    for x in range(4, 12):
+        if ((x - 7.5) / 4) ** 2 + ((y - 8) / 2) ** 2 <= 1: sp[x, y] = 11
+sp[7, 8] = 6; sp[8, 8] = 6
+outline_sprite(sp, 16, 16)
+
+
+def bush_sprite(berries):
+    im, p = sprite_canvas(16, 16)
+    for y in range(13, 16):
+        for x in range(16):
+            if ((x - 8) / 7.5) ** 2 + ((y - 14) / 1.8) ** 2 <= 1: p[x, y] = 8
+    rng = random.Random(9)
+    canopy(p, 8, 8, 6, rng)
+    if berries:
+        for (x, y) in ((5, 6), (10, 7), (7, 10), (11, 11), (4, 10)): p[x, y] = 9
+        p[9, 4] = 10
+    outline_sprite(p, 16, 16)
+    return im
+
+
+bush_full, bush_bare = bush_sprite(True), bush_sprite(False)
+
+kiln, kp = sprite_canvas(32, 32)
+for y in range(27, 32):
+    for x in range(32):
+        if ((x - 16) / 14) ** 2 + ((y - 29.5) / 2.2) ** 2 <= 1: kp[x, y] = 8
+for y in range(6, 29):                              # a stone dome
+    for x in range(4, 28):
+        if ((x - 16) / 12) ** 2 + ((y - 20) / 14) ** 2 <= 1 and y < 29:
+            kp[x, y] = 12 if ((x // 4 + y // 3) % 2) else 13
+for y in range(19, 28):                             # the fire door
+    for x in range(12, 20):
+        if ((x - 16) / 4) ** 2 + ((y - 24) / 5) ** 2 <= 1: kp[x, y] = 14 if y < 24 else 15
+for y in range(2, 8):                               # chimney
+    for x in range(14, 18): kp[x, y] = 13
+outline_sprite(kp, 32, 32)
+
+nature_words = []
+for im, tw, th in ((oak, 4, 4), (bigtree, 8, 8), (stump, 2, 2), (bush_full, 2, 2), (bush_bare, 2, 2), (kiln, 4, 4)):
+    nature_words += tiles_4bpp(im, tw, th)
+NATURE_PAL = [(0, 0, 0), (36, 30, 40), (28, 82, 48), (44, 112, 58), (70, 146, 70), (112, 180, 84), (86, 56, 36),
+              (122, 82, 50), (66, 118, 60), (220, 50, 60), (250, 230, 120), (214, 176, 120), (150, 146, 156),
+              (100, 96, 110), (240, 120, 40), (255, 210, 90)]
+PLAYER_PAL = [(0, 0, 0), (36, 30, 40), (248, 200, 160), (220, 160, 120), (110, 66, 40), (80, 46, 30),
+              (200, 56, 56), (150, 40, 44), (60, 80, 140), (60, 44, 36), (250, 250, 250)]
+prev = Image.new("RGB", (64 * 4, 64))
+for i, (im, pal_) in enumerate(((oak, NATURE_PAL), (bigtree, NATURE_PAL), (kiln, NATURE_PAL), (grid_image(PLAYER_FRAMES["down0"]), PLAYER_PAL))):
+    f = []
+    for c in pal_ + [(0, 0, 0)] * (256 - len(pal_)):
+        f += list(c)
+    im2 = im.copy()
+    im2.putpalette(f)
+    prev.paste(im2.convert("RGB"), (i * 64, 0))
+prev.resize((64 * 4 * 3, 64 * 3), Image.NEAREST).save(os.path.join(PREVIEW, "field_sprites.png"))
+
+
+def rgb15_early(c):
+    return (c[0] >> 3) | ((c[1] >> 3) << 5) | ((c[2] >> 3) << 10)
+
+# ---- field sprites, Stardew-sized --------------------------------------------------------
+# Player 16x32 (OBJ bank 0): 1 outline, 2 skin, 3 skin shade, 4 hair, 5 hair shade,
+# 6 shirt, 7 shirt shade, 8 pants, 9 shoes, 10 white.
+def pad16(rows, h=32):
+    rows = [r.ljust(16, ".")[:16] for r in rows]
+    return ["." * 16] * (h - len(rows)) + rows
+
+
+HEAD_DOWN = [".....111111.....", "....14444441....", "...1444444441...", "...1444444441...", "...1445444541...",
+             "...1422222241...", "...1422222241...", "...1212222121...", "...1222222221...", "....12222221....",
+             ".....122221....."]
+HEAD_UP = [".....111111.....", "....14444441....", "...1444444441...", "...1444444441...", "...1444444441...",
+           "...1444444441...", "...1445444541...", "...1445555441...", "...1444444441...", "....14444441....",
+           ".....155551....."]
+BODY_DOWN = ["....16666661....", "...1666666661...", "..126666666621..", "..126666666621..", "..127666666721..",
+             "..121766667121..", "...1177777711...", "....18888881....", "....18888881...."]
+BODY_UP = ["....17777771....", "...1777777771...", "..127777777721..", "..127777777721..", "..127777777721..",
+           "..121777777121..", "...1177777711...", "....18888881....", "....18888881...."]
+LEGS_A = ["....188..881....", "....188..881....", "....188..881....", "....199..991....", "...1999..9991...",
+          "...111....111..."]
+LEGS_B = ["....188..881....", "....199..881....", "...1999..881....", "...111...991....", ".........9991...",
+          ".........111...."]
+HEAD_SIDE = [".....11111......", "....1444441.....", "...144444441....", "...144444441....", "...144444451....",
+             "...122224451....", "...122224441....", "...121224441....", "...122222241....", "....1222221.....",
+             ".....12221......"]
+BODY_SIDE = [".....166661.....", "....16666661....", "....16666661....", "....16666621....", "....17666621....",
+             "....17666121....", "....1777771.....", "....1888881.....", "....1888881....."]
+LEGS_SIDE_A = ["....188.881.....", "....188.881.....", "....188.881.....", "....199.991.....", "...1999.9991....",
+               "...1111.1111...."]
+LEGS_SIDE_B = [".....18881......", ".....18881......", ".....18891......", ".....19991......", "....19991.......",
+               "....11111......."]
+PLAYER_FRAMES = {
+    "down0": pad16(HEAD_DOWN + BODY_DOWN + LEGS_A), "down1": pad16(HEAD_DOWN + BODY_DOWN + LEGS_B),
+    "up0": pad16(HEAD_UP + BODY_UP + LEGS_A), "up1": pad16(HEAD_UP + BODY_UP + LEGS_B),
+    "side0": pad16(HEAD_SIDE + BODY_SIDE + LEGS_SIDE_A), "side1": pad16(HEAD_SIDE + BODY_SIDE + LEGS_SIDE_B),
+}
+player_words = []
+for name in ("down0", "down1", "up0", "up1", "side0", "side1"):
+    player_words += tiles_4bpp(grid_image(PLAYER_FRAMES[name]), 2, 4)
+
+# The axe while swinging (16x16, nature palette): handle and head.
+AXE = ["................", "............11..", "...........1cc1.", "..........1cdd1.", ".........16cd1..",
+       "........167.1...", ".......167......", "......167.......", ".....167........", "....167.........",
+       "...167..........", "..167...........", "..11............", "................", "................",
+       "................"]
+
+# Kiln, rebuilt from rows of stones with mortar lines (no checkerboard).
+kiln, kp = sprite_canvas(32, 32)
+for y in range(27, 32):
+    for x in range(32):
+        if ((x - 16) / 14) ** 2 + ((y - 29.5) / 2.2) ** 2 <= 1: kp[x, y] = 8
+for y in range(6, 29):
+    for x in range(4, 28):
+        if ((x - 16) / 12) ** 2 + ((y - 21) / 15) ** 2 <= 1:
+            row = (y - 6) // 4
+            mortar = (y - 6) % 4 == 3 or (x + (row % 2) * 3) % 6 == 0
+            light = x < 16 - (y - 6) // 4
+            kp[x, y] = 13 if mortar else (12 if light else 13 if x > 22 else 12)
+            if not mortar and (x + y) % 7 == 0: kp[x, y] = 11
+for y in range(19, 28):
+    for x in range(12, 20):
+        if ((x - 16) / 4.2) ** 2 + ((y - 24) / 5) ** 2 <= 1: kp[x, y] = 14 if (y < 23 or x in (12, 13, 19)) else 15
+for y in range(1, 8):
+    for x in range(14, 19): kp[x, y] = 12 if x < 16 else 13
+outline_sprite(kp, 32, 32)
+
+# Debris: a twig, a stone, a clump of weeds (nature palette).
+twig = grid_image(pad16(["................", "..........1.....", ".........171....", "...11...1761....",
+                         "..1771.17611....", "...1767761......", "....167761......", ".....11161......",
+                         "......1..1......", "................", "....88888888....", "................"], 16))
+stone = grid_image(pad16(["................", ".....111111.....", "....1ccccccd1...", "...1cccccccdd1..",
+                          "..1ccccccddddd1.", "..1cccdddddddd1.", "..1ddddddddddd1.", "...1dddddddd11..",
+                          "....11111111....", "...8888888888...", "................"], 16))
+weeds = grid_image(pad16(["................", ".....1....1.....", "....141..141....", "....1431.141..1.",
+                          ".1..14311431.141", "141..1431431.131", "1431.143143114 1", ".1431.1431431431",
+                          "..14311431431431", "...1443343343441", "....111111111111", "...8888888888888"], 16))
+# Forage flowers (16x16): their own palette banks so each can take any petal color.
+# 1 outline, 2 stem, 3 petal, 4 petal light, 5 center.
+flower = grid_image(pad16(["................", "......111.......", ".....14431......", "....1443431.....",
+                           "...144353441....", "....1435531.....", ".....14431......", "......121.......",
+                           "...11..121......", "..1221.121......", "...1221121......", ".....12221......",
+                           "......121.......", "....8882888.....", "................"], 16))
+sparkle = grid_image(["...a....", "...a....", "..aaa...", "aaaaaaa.", "..aaa...", "...a....", "...a....", "........"])
+
+nature_words = []
+for im, tw, th in ((oak, 4, 4), (bigtree, 8, 8), (stump, 2, 2), (bush_full, 2, 2), (bush_bare, 2, 2), (kiln, 4, 4),
+                   (twig, 2, 2), (stone, 2, 2), (weeds, 2, 2), (grid_image(AXE), 2, 2), (flower, 2, 2), (sparkle, 1, 1)):
+    nature_words += tiles_4bpp(im, tw, th)
+# Petal colors for the flowers (petal, light): RED, BLUE, YELLOW, VIOLET, PINK, ORANGE.
+FLOWER_COLORS = [((210, 50, 50), (250, 120, 110)), ((60, 100, 220), (130, 170, 250)), ((236, 196, 40), (255, 236, 120)),
+                 ((140, 70, 210), (190, 140, 250)), ((236, 110, 170), (255, 170, 210)), ((236, 120, 40), (255, 180, 100))]
+flower_pals = []
+for petal, light in FLOWER_COLORS:
+    flower_pals += [rgb15_early(c) for c in [(0, 0, 0), (36, 30, 40), (60, 130, 60), petal, light, (250, 220, 90)]] + [0] * 10
+
+prev = Image.new("RGB", (64 * 6, 64))
+for i, (im, pal_) in enumerate(((oak, NATURE_PAL), (kiln, NATURE_PAL), (twig, NATURE_PAL), (weeds, NATURE_PAL),
+                                 (grid_image(PLAYER_FRAMES["down0"]), PLAYER_PAL), (grid_image(PLAYER_FRAMES["side1"]), PLAYER_PAL))):
+    f = []
+    for c in pal_ + [(0, 0, 0)] * (256 - len(pal_)):
+        f += list(c)
+    im2 = im.copy()
+    im2.putpalette(f)
+    prev.paste(im2.convert("RGB"), (i * 64, 0))
+prev.resize((64 * 6 * 3, 64 * 3), Image.NEAREST).save(os.path.join(PREVIEW, "field_sprites.png"))
+
 # ---- write art.c / art.h ----------------------------------------------------------
 
 
@@ -834,6 +1162,12 @@ hdr.append(f"#define MAP_PAL_N {len(mpal)}   // BG palette 16.. (the day map)")
 arr("u16", "map_pal", [rgb15(c) for c in mpal])
 arr("u8", "map_bg", list(mp.get_flattened_data() if hasattr(mp, "get_flattened_data") else mp.getdata()), 48, align=True)
 arr("u32", "map_tiles", [f"0x{w:08X}" for w in map_words], 8)   # arrow, player (16x16 each)
+arr("u8", "forest_bg", list(fd.get_flattened_data() if hasattr(fd, "get_flattened_data") else fd.getdata()), 48, align=True)
+arr("u32", "player_tiles", [f"0x{w:08X}" for w in player_words], 8)   # 16x32: down0 down1 up0 up1 side0 side1
+arr("u32", "nature_tiles", [f"0x{w:08X}" for w in nature_words], 8)   # see the nature_words list order
+arr("u16", "nature_pal", [rgb15(c) for c in NATURE_PAL])
+arr("u16", "player_pal", [rgb15(c) for c in PLAYER_PAL])
+arr("u16", "flower_pals", flower_pals)   # 6 banks of 16: red, blue, yellow, violet, pink, orange
 open(OUT_C, "w").write("\n".join(src) + "\n")
 open(OUT_H, "w").write("\n".join(hdr) + "\n")
 print(f"art: shop palette {len(pal)} colors, {len(cust_words) // 8} customer tiles, {len(FONT_CHARS)} glyphs")

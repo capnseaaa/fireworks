@@ -570,25 +570,27 @@
 1 1
 1 0
 30 0 d_work2.ppm
-40 0 d_result.ppm
-1 0 @$day_st,$day_min,$shells,$powder
-1 1
+1 0 @$scene
+1 2
 1 0
+40 0 d_result.ppm
+1 0 @$scene,$day_st,$day_min
 1 8
 1 0
 10 0 d_bag.ppm
-1 2
+1 8
 1 0
-1 0 !$day_min=580
-1 1
-1 0
-1 2
-1 0
+1 0 !$day_min=590
 1 128
 1 0
 1 1
 1 0
-70 0
+5 0
+1 16
+1 0
+1 1
+1 0
+10 0
 1 0 @$day_st,$day_min
 10 0 d_dusk.ppm
 1 1

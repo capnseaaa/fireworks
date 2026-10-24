@@ -16,12 +16,13 @@ extern const u8 size_time[3], pat_time[P_COUNT], size_powder[3], size_pay[3];
 // --- main.c: frame, input, sprites, scenes ---
 extern volatile u32 frame;
 extern u16 keys, hit;            // held, newly pressed
-enum { SC_TITLE, SC_FREE, SC_SHOP, SC_SHOW, SC_REVIEW, SC_DAY, SC_INTRO };
+enum { SC_TITLE, SC_FREE, SC_SHOP, SC_SHOW, SC_REVIEW, SC_DAY, SC_INTRO, SC_FIELD };
 extern int scene;
 void set_scene(int s);            // switches at the start of the next frame
 void blank_once(void);            // hide the screen until the next drawn frame (scene loads)
 // shape: 0 square, 1 wide, 2 tall
 void sprite(int x, int y, int tile, int shape, int size, int pal);
+void sprite_flip_last(void);     // mirror the sprite just added
 
 // --- ui.c: drawing into a mode 4 page (palette 1..15) ---
 enum { UI_WHITE = 1, UI_SHADOW, UI_FILL, UI_GOLD, UI_GOLD_DK, UI_GRAY, UI_RED, UI_GREEN, UI_PINK,
@@ -66,6 +67,18 @@ enum { TOOL_PICK = 1, TOOL_NET = 2, TOOL_ROPE = 4 };
 extern int tools;
 void day_enter(void);
 void day_update(u8* back);
+void day_return(void);            // back to the map from walking an area, same day
+char* day_clock(char* p, int minutes);
+extern int day_min;
+#define DAY_END_MIN 600           // 6 PM
+
+// --- field.c: walking an area and gathering ---
+enum { GEAR_AXE, GEAR_BAG, GEAR_COUNT };
+extern u8 gear[GEAR_COUNT];       // tier 1..3
+extern int bag_used;              // items picked up today
+int bag_size(void);
+void field_enter(void);
+void field_update(u8* back);
 
 // --- shop.c ---
 void shop_enter(void);

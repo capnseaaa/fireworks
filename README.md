@@ -4,7 +4,7 @@ A cozy firework-making game for the Game Boy Advance, played in emulators (built
 
 Planned loop: by day, gather materials around town and sometimes find new patterns. By night, customers ask for fireworks and you build them from a quick menu. At the end of the night, everything you made goes up in a show.
 
-## Current state: v0.5.0, shop upgrades and reputation
+## Current state: v0.6.0, the forest you can walk
 - **Title:** CONTINUE, NEW GAME, or FREE PLAY (the v0.1 sandbox; SELECT+START returns to the title).
 - **Intro:** you've just taken over Grandma's firework shop in a seaside town. Nine short pages in your own words, with the controls in brackets. START skips it.
 - **Saving:** the game saves itself at the start of every night and every day. CONTINUE picks up there. NEW GAME asks before replacing a save.
@@ -12,7 +12,8 @@ Planned loop: by day, gather materials around town and sometimes find new patter
 - **The show:** at closing time, every firework you made goes up. You don't see whose is whose.
 - **Review time:** each customer's comment pops up over the town, then the night gets a 0-5 star rating with coins, reputation, and gifts.
 - **Day:** walk the town map from 8:00 AM to 6:00 PM. Every walk (20 min) and job costs time, and each spot works once a day.
-  - Forest: chop wood (shells), burn charcoal (powder), search the grove (green stars).
+  - Forest (EXPLORE): walk around, Stardew style. Chop oaks (several axe swings; shells), search bushes (green stars), pick sparkling flowers (red, blue, yellow, violet, pink, orange stars), clear twigs, weeds, and stones (a pickaxe), and fire the kiln: hold A to keep the heat in the moving green band for powder. The big old tree needs a better axe and may hide a scroll. Flowers and debris come back fresh each day. Walking is free; each action costs a few minutes.
+  - Gear: the axe (3 tiers) and the bag (holds 20, 30, 40 things a day), sold at the market.
   - Mine: dig sulfur (powder, sometimes red). Deep tunnel needs a pickaxe (blue, cyan, violet, green).
   - Beach: comb the sand (yellow, orange, gold), driftwood (shells). Tide pools need a net (pink, cyan, blue, scrolls).
   - Quarry: needs a rope (white, silver, scrolls).
