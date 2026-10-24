@@ -1654,6 +1654,145 @@ crate_spr = grid_image(pad16(["................", "................", "..1111111
                               "..1b77777777b1..", "..1b76666667b1..", "..1b77777777b1..", "..1b76666667b1..",
                               "..1b77777777b1..", "..1bbbbbbbbbb1..", "..111111111111..", "..888888888888..",
                               "................"], 16))
+
+# ---- the Starbloom logo -----------------------------------------------------------------
+# Chunky letters (8x10, drawn at 3x), a sunset gradient from gold to pink, a dark outline,
+# a drop shadow, and a lit top edge. On the title it spans the screen: four 64x32 sprites
+# over eight 32x8 sprites for the bottom rows.
+LOGO_LETTERS = {
+    "S": [".######.", "########", "###.....", "###.....", "#######.", ".#######", ".....###", ".....###", "########", ".######."],
+    "T": ["########", "########", "...##...", "...##...", "...##...", "...##...", "...##...", "...##...", "...##...", "...##..."],
+    "A": ["..####..", ".######.", "###..###", "##....##", "##....##", "########", "########", "##....##", "##....##", "##....##"],
+    "R": ["######..", "#######.", "##...###", "##...###", "#######.", "######..", "##.###..", "##..###.", "##...###", "##....##"],
+    "B": ["######..", "#######.", "##...###", "##..###.", "######..", "#######.", "##...###", "##...###", "#######.", "######.."],
+    "L": ["##......", "##......", "##......", "##......", "##......", "##......", "##......", "##......", "########", "########"],
+    "O": [".######.", "########", "###..###", "##....##", "##....##", "##....##", "##....##", "###..###", "########", ".######."],
+    "M": ["##....##", "###..###", "########", "########", "##.##.##", "##....##", "##....##", "##....##", "##....##", "##....##"],
+}
+LOGO_PAL = [(0, 0, 0), (44, 22, 64), (22, 14, 44), (255, 240, 150), (255, 216, 96), (252, 178, 92), (246, 138, 124),
+            (236, 108, 164), (196, 86, 186), (255, 252, 236), (255, 232, 120), (255, 255, 255)]
+LW, LH = 256, 40
+LS = 3                                          # letter pixel size
+logo = Image.new("P", (LW, LH), 0)
+lp = logo.load()
+fill = set()
+word = "STARBLOOM"
+x0 = (240 - (len(word) * 8 * LS + (len(word) - 1) * 2)) // 2 - 1
+for k, ch in enumerate(word):
+    for r, row in enumerate(LOGO_LETTERS[ch]):
+        for c, v in enumerate(row):
+            if v == "#":
+                for dy in range(LS):
+                    for dx in range(LS):
+                        fill.add((x0 + k * (8 * LS + 2) + c * LS + dx, 3 + r * LS + dy))
+for (x, y) in fill:                                   # drop shadow, down and right
+    for d in (1, 2, 3):
+        if 0 <= x + d < LW and y + d < LH and (x + d, y + d) not in fill: lp[x + d, y + d] = 2
+for (x, y) in fill:                                   # outline
+    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1), (1, -1), (-1, 1)):
+        if 0 <= x + dx < LW and 0 <= y + dy < LH and (x + dx, y + dy) not in fill: lp[x + dx, y + dy] = 1
+for (x, y) in fill:                                   # the gradient, top to bottom, and a lit top edge
+    band = min(5, max(0, (y - 3) * 6 // (10 * LS)))
+    lp[x, y] = 3 + band
+    if (x, y - 1) not in fill: lp[x, y] = 9
+# A little four-point sparkle in the middle of each O, like a firework blooming.
+for k, ch in enumerate(word):
+    if ch == "O":
+        cx, cy = x0 + k * (8 * LS + 2) + 4 * LS - 1, 3 + 5 * LS - 1
+        for (dx, dy) in ((0, 0), (1, 0), (0, 1), (1, 1)): lp[cx + dx, cy + dy] = 11
+        for (dx, dy) in ((0, -2), (1, -2), (0, 3), (1, 3), (-2, 0), (-2, 1), (3, 0), (3, 1)): lp[cx + dx, cy + dy] = 10
+logo_words = []
+for sx in range(4):                                   # four 64x32 sprites, left to right
+    logo_words += tiles_4bpp(logo.crop((sx * 64, 0, sx * 64 + 64, 32)), 8, 4)
+for sx in range(8):                                   # then eight 32x8 sprites for rows 32..39
+    logo_words += tiles_4bpp(logo.crop((sx * 32, 32, sx * 32 + 32, 40)), 4, 1)
+lflat = []
+for c in LOGO_PAL + [(0, 0, 0)] * (256 - len(LOGO_PAL)):
+    lflat += list(c)
+logo.putpalette(lflat)
+logo.convert("RGB").resize((LW * 4, LH * 4), Image.NEAREST).save(os.path.join(PREVIEW, "logo_preview.png"))
+logo_pal = [rgb15_early(c) for c in LOGO_PAL] + [0] * (16 - len(LOGO_PAL))
+
+# ---- cover art (640x640, for the R36 game list and the repo page) -------------------------
+def make_cover(logo_y=44, name="cover.png"):
+    S = 640
+    cv = Image.new("RGB", (S, S))
+    cp = cv.load()
+    for y in range(S):                                # the night sky: deep navy to dusky violet
+        t = y / S
+        r, g, b = int(14 + 60 * t), int(12 + 26 * t), int(52 + 60 * t)
+        for x in range(S): cp[x, y] = (r, g, b)
+    crng = random.Random(8)
+    for _ in range(140):                              # stars
+        x, y = crng.randrange(S), crng.randrange(int(S * 0.6))
+        v = crng.randrange(150, 255)
+        cp[x, y] = (v, v, min(255, v + 20))
+    # Fireworks: rings of particles with trails, in the game's colors.
+    def burst(cx, cy, rad, col, n=70):
+        for i in range(n):
+            a = 2 * math.pi * i / n + crng.random() * 0.1
+            rr = rad * (0.75 + 0.25 * crng.random())
+            for k in range(30):                       # a trail toward the center, brightest at the tip
+                f = 1 - k * 0.02
+                px_, py_ = cx + math.cos(a) * rr * f, cy + math.sin(a) * rr * f + (k * 0.25)
+                if 0 <= px_ < S and 0 <= py_ < S:
+                    w = max(0.0, 1 - k / 30) * 0.8
+                    o = cp[int(px_), int(py_)]
+                    c = tuple(min(255, int(o[j] + col[j] * w)) for j in range(3))
+                    for dx in (0, 1):
+                        for dy in (0, 1):
+                            if int(px_) + dx < S and int(py_) + dy < S: cp[int(px_) + dx, int(py_) + dy] = c
+        for yy in range(int(cy) - 14, int(cy) + 15):  # a soft glow in the middle
+            for xx in range(int(cx) - 14, int(cx) + 15):
+                d = math.hypot(xx - cx, yy - cy)
+                if d < 14 and 0 <= xx < S and 0 <= yy < S:
+                    w = (1 - d / 14) ** 2 * 0.7
+                    o = cp[xx, yy]
+                    cp[xx, yy] = tuple(min(255, int(o[j] + (col[j] * 0.5 + 128) * w)) for j in range(3))
+    if logo_y < 120:                                 # logo at the top: bursts below it
+        burst(170, 330, 120, (250, 120, 160))
+        burst(470, 290, 140, (250, 200, 90))
+        burst(330, 420, 90, (120, 190, 255))
+        burst(540, 470, 70, (160, 240, 120), 50)
+        burst(90, 470, 60, (200, 140, 255), 44)
+    else:                                            # logo in the middle: bursts above and below
+        burst(150, 130, 100, (250, 120, 160))
+        burst(470, 120, 115, (250, 200, 90))
+        burst(318, 64, 52, (120, 190, 255), 44)
+        burst(588, 214, 46, (200, 140, 255), 40)
+        burst(54, 230, 42, (160, 240, 120), 36)
+        burst(140, 440, 80, (200, 140, 255), 56)
+        burst(500, 450, 78, (160, 240, 120), 54)
+        burst(320, 420, 66, (120, 190, 255), 50)
+    # The town along the bottom: the game's skyline, scaled up, with lit windows.
+    srng = random.Random(7)
+    x = 0
+    while x < S:
+        w, h = srng.randrange(40, 90), srng.randrange(70, 170)
+        for yy in range(S - h, S):
+            for xx in range(x, min(S, x + w)): cp[xx, yy] = (34, 26, 58)
+        x += w
+    x = 0
+    while x < S:
+        w, h = srng.randrange(30, 70), srng.randrange(30, 110)
+        for yy in range(S - h, S):
+            for xx in range(x, min(S, x + w)): cp[xx, yy] = (14, 12, 26)
+        for wy in range(S - h + 10, S - 10, 14):
+            for wx in range(x + 6, min(S, x + w) - 6, 12):
+                if srng.random() < 0.35:
+                    for yy in range(wy, wy + 6):
+                        for xx in range(wx, wx + 4): cp[xx, yy] = (255, 210, 110)
+        x += w + srng.randrange(0, 10)
+    # The logo, big, at the top.
+    big = logo.crop((0, 0, 240, LH)).convert("RGBA").resize((240 * 5 // 2, LH * 5 // 2), Image.NEAREST)
+    data = [(r, g, b, 0 if (r, g, b) == (0, 0, 0) else 255) for (r, g, b, a) in (big.get_flattened_data() if hasattr(big, "get_flattened_data") else big.getdata())]
+    big.putdata(data)
+    cv.paste(big, ((S - big.width) // 2, logo_y), big)
+    cv.save(os.path.join(ROOT, "art", name))
+
+
+make_cover(250)                                    # the cover: the logo in the middle (Caleb's pick)
+make_cover(44, "cover_top.png")                    # the earlier layout, kept for comparison
 # ---- write art.c / art.h ----------------------------------------------------------
 
 
@@ -1714,6 +1853,8 @@ arr("u8", "quarry_mask", quarry_mask, 30)   # one bit per pixel: 1 = walkable
 arr("u8", "quarry_spots", [v for t in quarry_spots for v in t], 24)   # x, y, level
 hdr.append(f"#define QUARRY_SPOTS {len(quarry_spots)}")
 arr("u32", "crate_tiles", [f"0x{w:08X}" for w in tiles_4bpp(crate_spr, 2, 2)], 8)
+arr("u32", "logo_tiles", [f"0x{w:08X}" for w in logo_words], 8)   # 3 sprites of 64x32
+arr("u16", "logo_pal", logo_pal)
 open(OUT_C, "w").write("\n".join(src) + "\n")
 open(OUT_H, "w").write("\n".join(hdr) + "\n")
 print(f"art: shop palette {len(pal)} colors, {len(cust_words) // 8} customer tiles, {len(FONT_CHARS)} glyphs")

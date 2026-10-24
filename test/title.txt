@@ -1,0 +1,7 @@
+# The title: fireworks above the logo.
+30 0 t0.ppm
+60 0 t1.ppm
+60 0 t2.ppm
+60 0 t3.ppm
+90 0 t4.ppm
+60 0 t5.ppm

@@ -9,6 +9,8 @@
 #define T_FONT  768   // 3x5 sprite font (free play HUD)
 #define T_STAR  808
 #define T_MOON  809   // 16x16, 4 tiles
+#define T_LOGO  848   // the Starbloom logo: 4 sprites of 64x32, then 8 of 32x8 (160 tiles), OBJ palette bank 5
+#define LOGO_Y  50                    // the logo sits in the middle of the sky (Caleb's pick)
 
 u32 cpu_ticks;                // last frame's work, in 1/64 cycles (4389 = one full frame)
 static u16 base_grad[160];
@@ -232,7 +234,7 @@ void show_sprites(void) {
     for (int i = 0; i < 24; i++)
         if (!hidden(star_xy[i][0] + 3, star_xy[i][1] + 3, 1, 1)) sprite(star_xy[i][0], star_xy[i][1], T_STAR, 0, 0, 2);
     // In review time and the intro the town sits behind the bitmap, so boxes cover it.
-    for (int k = 0; k < 4; k++) sprite(k * 64, 96, (T_SKY + k * 64) | (scene == SC_REVIEW || scene == SC_INTRO ? 1 << 10 : 0), 0, 3, 0);
+    for (int k = 0; k < 4; k++) sprite(k * 64, 96, (T_SKY + k * 64) | (scene == SC_REVIEW || scene == SC_INTRO || scene == SC_TITLE ? 1 << 10 : 0), 0, 3, 0);
 }
 
 // --- shells --------------------------------------------------------------------
@@ -255,22 +257,27 @@ static void sphere(int x, int y, int n, int speed, int kind, int hue, int life, 
     }
 }
 
+// A rocket's hue byte: low 4 bits the color; high 4 bits the second color + 1 (0 = none).
 static void explode(const Burst* b) {
-    int x = b->x, y = b->y, hue = b->hue;
+    int x = b->x, y = b->y, hue = b->hue & 15, hue2 = (b->hue >> 4) - 1;
+    int h2 = hue2 >= 0 ? hue2 : hue;               // where a pattern splits its stars
     int pat = b->aux & 15, size = b->aux >> 4;
     int S = 300 + size * 80;
     int N = 60 + size * 45;
     u32 r = rnd();
     switch (pat) {
-    case P_PEONY:
+    case P_PEONY:                                   // a second color becomes the core
         sphere(x, y, N, S, K_PEONY, hue, 50, 15);
-        if (r & 1) sphere(x, y, N / 3, S * 2 / 5, K_PEONY, (hue + 3 + (r >> 1) % 6) % NCOLORS, 45, 15);
+        if (hue2 >= 0) sphere(x, y, N / 3, S * 2 / 5, K_PEONY, hue2, 45, 15);
+        else if (r & 1) sphere(x, y, N / 3, S * 2 / 5, K_PEONY, (hue + 3 + (r >> 1) % 6) % NCOLORS, 45, 15);
         break;
     case P_CHRYS:
-        sphere(x, y, N, S, K_CHRYS, hue, 60, 15);
+        sphere(x, y, N / 2, S, K_CHRYS, hue, 60, 15);
+        sphere(x, y, N - N / 2, S, K_CHRYS, h2, 60, 15);
         break;
     case P_WILLOW:
-        sphere(x, y, N * 4 / 5, S * 9 / 10, K_WILLOW, hue == H_GOLD ? H_WILLOW : hue, 150, 31);
+        sphere(x, y, N * 2 / 5, S * 9 / 10, K_WILLOW, hue == H_GOLD ? H_WILLOW : hue, 150, 31);
+        sphere(x, y, N * 2 / 5, S * 9 / 10, K_WILLOW, h2 == H_GOLD ? H_WILLOW : h2, 150, 31);
         break;
     case P_PALM: {
         int arms = 6 + (r & 1), rot = (r >> 1) & 255;
@@ -278,7 +285,7 @@ static void explode(const Burst* b) {
             int ang = (rot + a * 256 / arms) & 255;
             for (int j = 0; j < 7; j++) {
                 int s = S * (55 + j * 7) / 100;
-                add(x, y, s * sin_tab[(ang + 64) & 255] >> 8, s * sin_tab[ang] >> 8, 70 + j * 3, hue, K_PALM);
+                add(x, y, s * sin_tab[(ang + 64) & 255] >> 8, s * sin_tab[ang] >> 8, 70 + j * 3, (a & 1) ? h2 : hue, K_PALM);
             }
         }
         sphere(x, y, 12, S / 4, K_PEONY, H_GOLD, 25, 7);
@@ -293,35 +300,42 @@ static void explode(const Burst* b) {
             int cx = S * sin_tab[(a + 64) & 255] >> 8, cy = (S * sin_tab[a] >> 8) * tilt >> 8;
             // Rotate the flattened ring so it is not always level.
             int c = sin_tab[(rot + 64) & 255], s = sin_tab[rot];
-            add(x, y, (cx * c - cy * s) >> 8, (cx * s + cy * c) >> 8, 52, hue, K_PEONY);
+            add(x, y, (cx * c - cy * s) >> 8, (cx * s + cy * c) >> 8, 52, (i & 1) ? h2 : hue, K_PEONY);
         }
         break;
     }
     case P_CROSS:
-        sphere(x, y, 10 + size * 3, S * 4 / 5, K_CROSS, hue, 34, 7);
+        sphere(x, y, 5 + size * 2, S * 4 / 5, K_CROSS, hue, 34, 7);
+        sphere(x, y, 5 + size, S * 4 / 5, K_CROSS, h2, 34, 7);
         break;
     case P_HEART:
         for (int i = 0; i < 48; i++)
-            add(x, y, heart_tab[i * 2] * S / 300, heart_tab[i * 2 + 1] * S / 300, 58, hue, K_PEONY);
+            add(x, y, heart_tab[i * 2] * S / 300, heart_tab[i * 2 + 1] * S / 300, 58, (i & 1) ? h2 : hue, K_PEONY);
         break;
     case P_CRACKLE:
-        sphere(x, y, N * 3 / 4, S, K_CRACKLE, hue, 35, 31);
+        sphere(x, y, N * 3 / 8, S, K_CRACKLE, hue, 35, 31);
+        sphere(x, y, N * 3 / 8, S, K_CRACKLE, h2, 35, 31);
         break;
     case P_GLITTER:
-        sphere(x, y, N, S * 4 / 5, K_GLITTER, hue, 70, 31);
+        sphere(x, y, N / 2, S * 4 / 5, K_GLITTER, hue, 70, 31);
+        sphere(x, y, N - N / 2, S * 4 / 5, K_GLITTER, h2, 70, 31);
         break;
     }
     flash = 14 + size * 4;
     flash_hue = pat == P_WILLOW && hue == H_GOLD ? H_WILLOW : hue;
 }
 
-static void launch(int x, int pat, int hue, int size) {
+// Bursts at screen y apex (the default picks one at random).
+static void launch_at(int x, int pat, int hue, int size, int apex) {
     if (nparts >= MAXP) return;
-    int apex = 22 + (int)(rnd() % 50);         // burst height (screen y)
     int h = 152 - apex;
     int v0 = isqrt(2048 * h);                  // reaches the apex with gravity 4 (8.8)
     add(x << 6, 152 << 6, (int)(rnd() & 31) - 16, -v0, 255, hue, K_ROCKET);
     parts[nparts - 1].aux = pat | (size << 4);
+}
+
+static void launch(int x, int pat, int hue, int size) {
+    launch_at(x, pat, hue, size, 22 + (int)(rnd() % 50));
 }
 
 static void launch_random(void) {
@@ -354,6 +368,9 @@ void show_enter(void) {
     firework_palette();
     make_skyline();
     make_small_font();
+    vu32* lt = (vu32*)OBJ_TILES;
+    for (int i = 0; i < 160 * 8; i++) lt[T_LOGO * 8 + i] = logo_tiles[i];
+    for (int i = 0; i < 16; i++) OBJ_PAL[80 + i] = logo_pal[i];
     for (int i = 0; i < 24; i++) {
         u32 r = hash(i * 7919 + 13);
         star_xy[i][0] = r % 236;
@@ -370,7 +387,7 @@ void show_enter(void) {
     light_last = -1;
     show_on = 0;
     msg_timer = 0;
-    title_wait = 30;
+    title_wait = 1;                                  // the title opens with a firework
     title_saved = has_save();
     title_confirm = 0;
     title_cursor = title_saved ? 0 : 1;
@@ -386,9 +403,12 @@ static void text_center(u8* page, int y, const char* s, int color) {
 // --- title ---------------------------------------------------------------------
 
 void title_update(u8* back) {
+    // Fireworks bloom in the sky above the logo.
     if (--title_wait <= 0) {
-        launch_random();
-        title_wait = 50 + rnd() % 70;
+        int pat = rnd() % P_COUNT, hue = rnd() % NCOLORS;
+        launch_at(24 + rnd() % 192, pat, hue, rnd() % 2, 12 + rnd() % 20);
+        if ((rnd() & 3) == 0) launch_at(24 + rnd() % 192, rnd() % P_COUNT, rnd() % NCOLORS, 0, 14 + rnd() % 16);
+        title_wait = 35 + rnd() % 45;
     }
     static const char* const items[3] = { "CONTINUE", "NEW GAME", "FREE PLAY" };
     int first = title_saved ? 0 : 1;   // no CONTINUE without a save
@@ -405,16 +425,22 @@ void title_update(u8* back) {
         } else set_scene(SC_FREE);
     }
     sky_frame(back);
-    text_big(back, (240 - 9 * 12) / 2, 26, "FIREWORKS", UI_YELLOW);
-    text_center(back, 46, "A COZY FIREWORK SHOP", UI_WHITE);
+    text_center(back, LOGO_Y + 46, "A COZY FIREWORK SHOP", UI_WHITE);
+    // The logo, across the screen, with a few stars twinkling around it.
+    static const u8 twinkles[4][2] = { { 14, 20 }, { 220, 24 }, { 36, 72 }, { 200, 70 } };
+    for (int k = 0; k < 4; k++)
+        if (((frame >> 4) + k * 3) % 5 < 2) sprite(twinkles[k][0], twinkles[k][1], T_STAR, 0, 0, 2);
+    for (int k = 0; k < 4; k++) sprite(k * 64, LOGO_Y, T_LOGO + k * 32, 1, 3, 5);
+    for (int k = 0; k < 8; k++) sprite(k * 32, LOGO_Y + 32, T_LOGO + 128 + k * 4, 1, 1, 5);
+    hide_box(0, LOGO_Y - 4, 240, 48);               // no moon or stars over the logo
     for (int i = first; i < 3; i++) {
-        int y = 62 + (i - first) * 11;
+        int y = LOGO_Y + 62 + (i - first) * 11;
         text(back, 90, y, items[i], title_cursor == i ? UI_YELLOW : UI_WHITE);
         if (title_cursor == i) text(back, 80, y, ">", UI_YELLOW);
     }
     if (title_confirm) {
-        text_center(back, 100, "START OVER? YOUR SAVE WILL BE", UI_WHITE);
-        text_center(back, 110, "REPLACED. PRESS A AGAIN.", UI_WHITE);
+        text_center(back, 136, "START OVER? YOUR SAVE WILL BE", UI_WHITE);
+        text_center(back, 146, "REPLACED. PRESS A AGAIN.", UI_WHITE);
     }
     show_sprites();
 }
@@ -490,7 +516,7 @@ void nightshow_update(u8* back) {
             int n = ncrate;
             int x = n == 1 ? 120 : 40 + (ns_idx * 160 / (n - 1));
             x += (int)(rnd() % 21) - 10;
-            launch(x, s->pat, s->hue, s->size);
+            launch(x, s->pat, s->hue | ((s->hue2 + 1) << 4), s->size);
             ns_idx++;
             ns_wait = s->pat == P_WILLOW ? 150 : 110;
         }
@@ -549,6 +575,15 @@ void review_begin(void) {
         if (gift[0]) cat(rv_gifts[rv_ngifts++], gift);
     }
     rv_stars = ncrate ? (sum + ncrate) / (2 * ncrate) : 0;   // rounded, 0..5
+    // A grand finale: ending on a large firework, the biggest of the night.
+    if (ncrate >= 3 && crate[ncrate - 1].size == S_LARGE && rv_ngifts < MAXCRATE) {
+        coins += 20; night_coins += 20;
+        rep += 1; night_rep += 1;
+        for (int i = rv_ngifts; i > 0; i--) { rv_gifts[i][0] = 0; cat(rv_gifts[i], rv_gifts[i - 1]); }
+        rv_gifts[0][0] = 0;
+        cat(rv_gifts[0], "GRAND FINALE! +20C +1 REP");
+        rv_ngifts++;
+    }
     if (rep_tier() > tier0 && rv_ngifts < MAXCRATE) {        // the town knows your name now
         for (int i = rv_ngifts; i > 0; i--) { rv_gifts[i][0] = 0; cat(rv_gifts[i], rv_gifts[i - 1]); }
         char* p = cat(rv_gifts[0], "NEW TITLE: ");          // shown first

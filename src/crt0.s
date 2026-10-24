@@ -8,7 +8,7 @@ _start:
     @ Nintendo logo area (156 bytes). Emulators do not check it.
     .fill   156, 1, 0
 
-    .ascii  "FIREWORKS   "      @ game title, 12 bytes
+    .ascii  "STARBLOOM   "      @ game title, 12 bytes
     .ascii  "ZFWK"              @ game code (not F...: mGBA treats those as NES Classics, EEPROM saves)
     .ascii  "01"                @ maker code
     .byte   0x96                @ fixed value

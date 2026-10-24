@@ -1,15 +1,17 @@
-# Fireworks (working title)
+# Starbloom
 
 A cozy firework-making game for the Game Boy Advance, played in emulators (built for the R36 Ultra handheld).
 
 Planned loop: by day, gather materials around town and sometimes find new patterns. By night, customers ask for fireworks and you build them from a quick menu. At the end of the night, everything you made goes up in a show.
 
-## Current state: v0.9.0, the quarry
+## Current state: v0.10.0, two colors, show order, and a name
 - **Title:** CONTINUE, NEW GAME, or FREE PLAY (the v0.1 sandbox; SELECT+START returns to the title).
 - **Intro:** you've just taken over Grandma's firework shop in a seaside town. Nine short pages in your own words, with the controls in brackets. START skips it.
 - **Saving:** the game saves itself at the start of every night and every day. CONTINUE picks up there. NEW GAME asks before replacing a save.
 - **Night:** customers walk up with requests, some exact ("A BIG RED PEONY"), some vague ("A PERFECT CIRCLE IN THE SKY"). Build each one from quick menus: size, pattern, color. Bigger and fancier fireworks take more time on the night clock (8:00 PM to 1:00 AM) and use powder, shells, and colored stars. Or turn a customer away.
-- **The show:** at closing time, every firework you made goes up. You don't see whose is whose.
+- **Second color:** after the color, pick a SECOND COLOR (or NONE). It costs another star and 5 minutes and pays a little more. Peonies get a core in the second color; other patterns mix their stars. Some customers ask for two colors.
+- **Show order:** at closing, arrange tonight's fireworks (A picks one up and puts it down), then BEGIN THE SHOW. End on a large firework for a grand finale bonus at review time.
+- **The show:** every firework you made goes up, in your order. You don't see whose is whose.
 - **Review time:** each customer's comment pops up over the town, then the night gets a 0-5 star rating with coins, reputation, and gifts.
 - **Day:** walk the town map from 8:00 AM to 6:00 PM. Every walk (20 min) and job costs time, and each spot works once a day.
   - Forest (EXPLORE): walk around, Stardew style. Chop oaks (several axe swings; shells), search bushes (green stars), pick sparkling flowers (red, blue, yellow, violet, pink, orange stars), clear twigs, weeds, and stones (a pickaxe), and fire the kiln: hold A to keep the heat in the moving green band for powder. The big old tree needs a better axe and may hide a scroll. Flowers and debris come back fresh each day. Walking is free; each action costs a few minutes.

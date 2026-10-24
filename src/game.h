@@ -101,8 +101,10 @@ void shop_update(u8* back);
 // A firework in tonight's crate, with what its customer asked for and secretly likes.
 typedef struct {
     u8 pat, hue, size, cust;      // cust = index into cust_names
+    s8 hue2;                      // the second color, -1 = none
     u16 want_pats;                // acceptable patterns (0 = any)
     s8 want_hue, want_size;       // -1 = any
+    s8 want_hue2;                 // a second color they asked for, -1 = none
     u8 like_type, like_val;       // hidden like: 0 none, 1 color, 2 pattern, 3 size
 } Shell;
 #define MAXCRATE 14

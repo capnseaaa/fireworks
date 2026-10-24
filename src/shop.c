@@ -99,6 +99,7 @@ typedef struct {
     u8 name, style, skin, hair, shirt, acc;
     u16 want_pats;            // acceptable patterns (0 = any)
     s8 want_hue, want_size;   // -1 = any
+    s8 want_hue2;             // a second color, -1 = none
     u8 like_type, like_val;   // hidden like: 0 none, 1 color, 2 pattern, 3 size
     char body[96];            // the request without the greeting
     char line[120];
@@ -176,6 +177,7 @@ static void make_customer(void) {
     do cu.acc = rnd() % 8; while (cu.acc == cu.shirt);
     cu.want_pats = 0;
     cu.want_hue = -1;
+    cu.want_hue2 = -1;
     cu.want_size = -1;
 
     int pat = random_known_pattern();
@@ -183,10 +185,17 @@ static void make_customer(void) {
     int kind = rnd() % 100;
     if ((int)(rnd() % 100) < 15 * rep_tier()) kind = 40;   // a known shop gets bigger orders
     char* p = cu.body;
-    if (kind < 30) {                       // color + pattern
+    if (kind < 30) {                       // color + pattern, sometimes two colors
         p = cat(p, "COULD I GET ");
         p = cat(p, article(hue_names[hue]));
         p = cat(p, hue_names[hue]);
+        if (rnd() % 100 < 40) {
+            int h2;
+            do h2 = rnd() % 11; while (h2 == hue);
+            p = cat(p, " AND ");
+            p = cat(p, hue_names[h2]);
+            cu.want_hue2 = h2;
+        }
         p = cat(p, " ");
         p = cat(p, pat_names[pat]);
         cat(p, "?");
@@ -253,13 +262,27 @@ static int hue_rel(int want, int got) {
     return d == 1 ? R_CLOSE : d <= 3 ? R_MISS : R_OPP;
 }
 
-static int sel_size, sel_pat, sel_hue;
+static int sel_size, sel_pat, sel_hue, sel_hue2 = -1;
+
+// How close a firework's colors come to one wanted color (the better of its two).
+static int color_rel(const Shell* s, int want) {
+    int r = hue_rel(want, s->hue);
+    if (s->hue2 >= 0) {
+        int r2 = hue_rel(want, s->hue2);
+        if (r2 < r) r = r2;
+    }
+    return r;
+}
 
 // rel gets how close each part came: [0] color, [1] size, [2] pattern.
 static int judge(const Shell* s, int* liked, int* rel) {
     int closes = 0, misses = 0, opps = 0;
     rel[0] = rel[1] = rel[2] = R_MATCH;
-    if (s->want_hue >= 0) rel[0] = hue_rel(s->want_hue, s->hue);
+    if (s->want_hue >= 0) rel[0] = color_rel(s, s->want_hue);
+    if (s->want_hue2 >= 0) {               // two colors asked for: both have to be there
+        int r2 = color_rel(s, s->want_hue2);
+        if (r2 > rel[0]) rel[0] = r2;
+    }
     if (s->want_size >= 0) {
         int d = s->want_size > s->size ? s->want_size - s->size : s->size - s->want_size;
         rel[1] = d == 0 ? R_MATCH : d == 1 ? R_CLOSE : R_OPP;
@@ -275,7 +298,7 @@ static int judge(const Shell* s, int* liked, int* rel) {
         if (rel[i] == R_MISS) misses++;
         if (rel[i] == R_OPP) opps++;
     }
-    *liked = (s->like_type == LIKE_COLOR && s->hue == s->like_val) ||
+    *liked = (s->like_type == LIKE_COLOR && (s->hue == s->like_val || s->hue2 == s->like_val)) ||
              (s->like_type == LIKE_PAT && s->pat == s->like_val) ||
              (s->like_type == LIKE_SIZE && s->size == s->like_val);
     if (*liked) return closes + misses + opps == 0 ? T_LOVE : T_SURPRISE;
@@ -408,7 +431,7 @@ static void comment_for(char* out, const Shell* s, int tier, const int* rel) {
 int judge_shell(const Shell* s, char* comment, char* gift) {
     int liked, rel[3];
     int tier = judge(s, &liked, rel);
-    int pay = size_pay[s->size] + pat_time[s->pat] / 2;
+    int pay = size_pay[s->size] + pat_time[s->pat] / 2 + (s->hue2 >= 0 ? 4 : 0);
     pay = pay * (100 + 15 * upg[UPG_SIGN] + 10 * rep_tier()) / 100;   // the sign and your name
     int drep = 0;
     comment_for(comment, s, tier, rel);
@@ -433,8 +456,8 @@ int judge_shell(const Shell* s, char* comment, char* gift) {
 
 // --- dialog and menus --------------------------------------------------------------
 
-enum { ST_OPEN, ST_ARRIVE, ST_ASK, ST_CHOICE, ST_SIZE, ST_PAT, ST_COLOR, ST_CONFIRM, ST_CRAFT,
-       ST_THANKS, ST_DECLINE, ST_LEAVE, ST_CLOSED, ST_HINT };
+enum { ST_OPEN, ST_ARRIVE, ST_ASK, ST_CHOICE, ST_SIZE, ST_PAT, ST_COLOR, ST_COLOR2, ST_CONFIRM, ST_CRAFT,
+       ST_THANKS, ST_DECLINE, ST_LEAVE, ST_CLOSED, ST_HINT, ST_ORDER };
 
 int shop_st;                   // state (non-static so test scripts can read it)
 int shop_min;                  // minutes since 8:00 PM
@@ -444,6 +467,7 @@ static int show_cust, bubble;
 static int cursor;
 static int craft_from, craft_cost;
 static u32 page_sig[2];        // what each page last showed (skip unchanged redraws)
+static int held = -1;          // show order: the firework you are moving, or -1
 
 static char dlg[200];
 static int dlg_len, dlg_shown, dlg_who;   // dlg_who: 1 = the customer speaks
@@ -491,7 +515,7 @@ static char* time_str(char* p, int m) {
     return cat(p, am ? " AM" : " PM");
 }
 
-static int craft_minutes(void) { return craft_time(sel_size, sel_pat); }
+static int craft_minutes(void) { return craft_time(sel_size, sel_pat) + (sel_hue2 >= 0 ? 5 : 0); }
 
 // Fills the menu for the current state and the info line for the highlighted item.
 static void build_menu(void) {
@@ -558,6 +582,28 @@ static void build_menu(void) {
             cat(p, stock[h] == 1 ? " STAR LEFT" : " STARS LEFT");
         }
         break;
+    case ST_COLOR2:
+        menu_add("NONE", 1, 255);
+        for (int h = 0; h < NCOLORS; h++) {
+            if (h == sel_hue) continue;
+            char buf[20];
+            p = cat(buf, hue_names[h]);
+            while (p < buf + 8) *p++ = ' ';
+            cat_num(p, stock[h]);
+            menu_add(buf, stock[h] > 0, h);
+        }
+        {
+            int h = menu_val[cursor];
+            if (h == 255) cat(info, "JUST ONE COLOR");
+            else {
+                p = cat(info, "+5 MIN, 1 ");
+                p = cat(p, hue_names[h]);
+                p = cat(p, " (HAVE ");
+                p = cat_num(p, stock[h]);
+                cat(p, ")");
+            }
+        }
+        break;
     case ST_CONFIRM:
         menu_add("YES", 1, 0);
         menu_add("NO", 1, 1);
@@ -584,6 +630,7 @@ static char* craft_name(char* p) {
     p = cat(p, size_names[sel_size]);
     p = cat(p, " ");
     p = cat(p, hue_names[sel_hue]);
+    if (sel_hue2 >= 0) { p = cat(p, " AND "); p = cat(p, hue_names[sel_hue2]); }
     p = cat(p, " ");
     return cat(p, pat_names[sel_pat]);
 }
@@ -715,16 +762,23 @@ static void step(void) {
         build_menu();
         v = menu_update();
         if (v == -2) go(ST_PAT);
-        else if (v >= 0) { sel_hue = v; go(ST_CONFIRM); }
+        else if (v >= 0) { sel_hue = v; go(ST_COLOR2); }
+        break;
+    case ST_COLOR2:
+        build_menu();
+        v = menu_update();
+        if (v == -2) go(ST_COLOR);
+        else if (v >= 0) { sel_hue2 = v == 255 ? -1 : v; go(ST_CONFIRM); }
         break;
     case ST_CONFIRM:
         build_menu();
         v = menu_update();
-        if (v == -2 || v == 1) go(ST_COLOR);
+        if (v == -2 || v == 1) go(ST_COLOR2);
         else if (v == 0) {
             powder -= size_powder[sel_size];
             shells--;
             stock[sel_hue]--;
+            if (sel_hue2 >= 0) stock[sel_hue2]--;
             craft_from = shop_min;
             craft_cost = craft_minutes();
             char buf[64], *p = cat(buf, "MAKING ");
@@ -743,8 +797,9 @@ static void step(void) {
             shop_min = craft_from + craft_cost;
             if (ncrate < MAXCRATE) {
                 Shell* s = &crate[ncrate++];
-                s->pat = sel_pat; s->hue = sel_hue; s->size = sel_size; s->cust = cu.name;
+                s->pat = sel_pat; s->hue = sel_hue; s->hue2 = sel_hue2; s->size = sel_size; s->cust = cu.name;
                 s->want_pats = cu.want_pats; s->want_hue = cu.want_hue; s->want_size = cu.want_size;
+                s->want_hue2 = cu.want_hue2;
                 s->like_type = cu.like_type; s->like_val = cu.like_val;
             }
             // They take it with them; what they think of it comes after the show.
@@ -772,7 +827,26 @@ static void step(void) {
         }
         break;
     case ST_CLOSED:
-        if (a && done) set_scene(ncrate ? SC_SHOW : SC_REVIEW);
+        if (a && done) {
+            if (ncrate >= 2) { go(ST_ORDER); held = -1; cursor = ncrate; }   // the order, on "BEGIN" 
+            else set_scene(ncrate ? SC_SHOW : SC_REVIEW);
+        }
+        break;
+    case ST_ORDER:
+        // A picks a firework up or puts it down; while held, it moves with the cursor.
+        // The row after the last firework is BEGIN THE SHOW, where the cursor starts.
+        if ((hit & KEY_START) || ((hit & KEY_A) && cursor == ncrate)) { set_scene(SC_SHOW); break; }
+        if (hit & KEY_A) held = held < 0 ? cursor : -1;
+        {
+            int to = cursor, last = held >= 0 ? ncrate - 1 : ncrate;
+            if (hit & KEY_UP) to = cursor > 0 ? cursor - 1 : cursor;
+            if (hit & KEY_DOWN) to = cursor < last ? cursor + 1 : cursor;
+            if (to != cursor && held >= 0) {
+                Shell t = crate[cursor]; crate[cursor] = crate[to]; crate[to] = t;
+                held = to;
+            }
+            cursor = to;
+        }
         break;
     }
 }
@@ -782,6 +856,42 @@ static void step(void) {
 static void draw_page(u8* back);
 static void draw_sprites(void);
 
+// The running order for tonight's show, top first; the last one is the finale.
+static void draw_order(u8* back) {
+    box(back, 4, 14, 232, 100);
+    text(back, 14, 20, "TONIGHT'S SHOW, IN ORDER", UI_YELLOW);
+    int rows = 9, top = cursor >= rows ? cursor - rows + 1 : 0;
+    for (int r = 0; r < rows && top + r <= ncrate; r++) {
+        int i = top + r;
+        if (i == ncrate) {                             // the last row starts the show
+            int y = 31 + r * 9;
+            text(back, 22, y, "BEGIN THE SHOW", i == cursor ? UI_YELLOW : UI_GREEN);
+            if (i == cursor) text(back, 12, y, ">", UI_YELLOW);
+            break;
+        }
+        const Shell* s = &crate[i];
+        char buf[48], *p = cat_num(buf, i + 1);
+        p = cat(p, ". ");
+        p = cat(p, size_names[s->size]);
+        p = cat(p, " ");
+        p = cat(p, hue_names[s->hue]);
+        if (s->hue2 >= 0) { p = cat(p, "+"); p = cat(p, hue_names[s->hue2]); }
+        p = cat(p, " ");
+        p = cat(p, pat_names[s->pat]);
+        if (i == ncrate - 1) cat(p, " #");             // the finale (# is a star in the font)
+        int y = 31 + r * 9;
+        int c = i == held ? UI_GREEN : i == cursor ? UI_YELLOW : UI_WHITE;
+        text(back, 22, y, buf, c);
+        if (i == cursor) text(back, 12, y, held >= 0 ? "=" : ">", c);
+        fill_rect(back, 216, y, 4, 7, 16 + s->hue);
+        if (s->hue2 >= 0) fill_rect(back, 216, y + 4, 4, 3, 16 + s->hue2);
+    }
+    box(back, 0, 116, 240, 44);
+    text(back, 8, 121, held >= 0 ? "MOVING IT. A TO PUT IT DOWN." : "A ON A FIREWORK PICKS IT UP TO MOVE.", UI_WHITE);
+    text(back, 8, 131, "THE LAST ONE (#) IS THE FINALE.", UI_WHITE);
+    text(back, 8, 141, "END ON A LARGE ONE FOR A BONUS!", UI_YELLOW);
+}
+
 static int is_menu(void) { return shop_st >= ST_CHOICE && shop_st <= ST_CONFIRM; }
 
 static u32 mix(u32 h, int v) { return (h ^ (u32)v) * 16777619u; }
@@ -789,9 +899,10 @@ static u32 mix(u32 h, int v) { return (h ^ (u32)v) * 16777619u; }
 static void draw(u8* back) {
     // Most frames nothing changes; each page is redrawn only when what it shows changed.
     u32 sig = 2166136261u;
-    int vals[] = { shop_st, dlg_shown, dlg_len, cursor, shop_min, ncrate, coins, rep, (int)(frame & 16), shop_st == ST_CRAFT ? st_t : 0, dlg_who, night };
+    int vals[] = { shop_st, dlg_shown, dlg_len, cursor, shop_min, ncrate, coins, rep, (int)(frame & 16), held, shop_st == ST_CRAFT ? st_t : 0, dlg_who, night };
     for (unsigned i = 0; i < sizeof vals / sizeof vals[0]; i++) sig = mix(sig, vals[i]);
     for (int i = 0; i < dlg_len; i += 3) sig = mix(sig, dlg[i]);   // the words themselves
+    for (int i = 0; i < ncrate; i++) sig = mix(sig, crate[i].pat * 16 + crate[i].hue + crate[i].size * 256);
     sig = mix(sig, cu.name);
     int pi = back == PAGE1;
     int same = page_sig[pi] == sig;
@@ -821,9 +932,12 @@ static void draw_page(u8* back) {
     for (int i = 0; i < ncrate; i++) {
         int x = 150 + i * 6;
         fill_rect(back, x, 89, 4, 9, 16 + crate[i].hue);
+        if (crate[i].hue2 >= 0) fill_rect(back, x, 94, 4, 4, 16 + crate[i].hue2);   // a band of the second color
         fill_rect(back, x, 89, 4, 1, UI_WHITE);
         fill_rect(back, x + 1, 87, 1, 2, UI_SHADOW);
     }
+
+    if (shop_st == ST_ORDER) { draw_order(back); return; }
 
     // Dialog box.
     box(back, 0, 116, 240, 44);
@@ -867,7 +981,7 @@ static void draw_page(u8* back) {
         for (int r = 0; r < rows; r++) {
             int i = top + r, yy = y0 + 6 + r * 9;
             int c = !menu_ok[i] ? UI_GRAY : i == cursor ? UI_YELLOW : UI_WHITE;
-            if (shop_st == ST_COLOR && menu_ok[i])
+            if ((shop_st == ST_COLOR || shop_st == ST_COLOR2) && menu_ok[i] && menu_val[i] != 255)
                 fill_rect(back, x + w - 12, yy, 4, 5, 16 + menu_val[i]);   // a swatch of the color
             text(back, x + 13, yy, menu_txt[i], c);
             if (i == cursor) text(back, x + 5, yy, ">", UI_YELLOW);
