@@ -41,6 +41,16 @@ void text_typed(u8* page, int x, int y, char lines[][41], int n, int shown, int 
 char* cat(char* d, const char* s);
 char* cat_num(char* d, int v);
 
+// --- sound.c: sound effects (audio.h names them) and music ---
+#include "audio.h"
+void sound_init(void);
+void sound_frame(void);           // once a game loop: starts delayed sounds
+void sfx(int id);
+void sfx_ex(int id, int vol, int pitch);          // vol 0..64, pitch 256 = normal
+void sfx_later(int id, int vol, int pitch, int frames);
+void sfx_stop_all(void);
+void music(int song);             // keeps playing if it already is; -1 = silence
+
 // --- render.c (ARM, IWRAM) ---
 __attribute__((long_call)) void copy_page(u8* dst, const u8* src);
 __attribute__((long_call)) void fill_rect(u8* page, int x, int y, int w, int h, int c);
@@ -70,7 +80,7 @@ void day_update(u8* back);
 void day_return(void);            // back to the map from walking an area, same day
 char* day_clock(char* p, int minutes);
 extern int day_min;
-#define DAY_END_MIN 600           // 6 PM
+#define DAY_END_MIN 480           // 6 PM (the day starts at 10 AM)
 
 // --- field.c: walking an area and gathering ---
 enum { GEAR_AXE, GEAR_BAG, GEAR_PICK, GEAR_LANTERN, GEAR_COUNT };   // tiers; pickaxe/lantern 0 = none

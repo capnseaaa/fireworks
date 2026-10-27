@@ -1,4 +1,4 @@
-// Fireworks scenes: title, free play, the night's show, and review time.
+// Starbloom scenes: title, free play, the night's show, and review time.
 // Mode 4 bitmap (two pages) for particles, blended additively over a per-line sky
 // gradient (HBlank interrupt). Skyline, stars, and moon are sprites.
 #include "game.h"
@@ -257,6 +257,18 @@ static void sphere(int x, int y, int n, int speed, int kind, int hue, int life, 
     }
 }
 
+// Fireworks are quieter behind the title menu.
+static int fw_vol(void) { return scene == SC_TITLE ? 22 : scene == SC_INTRO ? 34 : 60; }
+
+// The sound of a burst: light travels faster, so the boom comes a few frames late.
+static void burst_sound(int pat, int size) {
+    static const u8 booms[3] = { SFX_BOOM_S, SFX_BOOM_M, SFX_BOOM_L };
+    int v = fw_vol(), late = 4 + (int)(rnd() % 6);
+    sfx_later(booms[size], v, 236 + (int)(rnd() % 40), late);
+    if (pat == P_CRACKLE) sfx_later(SFX_CRACKLE, v, 256, late + 24);
+    if (pat == P_GLITTER || pat == P_WILLOW) sfx_later(SFX_GLITTER, v * 3 / 4, 256, late + 14);
+}
+
 // A rocket's hue byte: low 4 bits the color; high 4 bits the second color + 1 (0 = none).
 static void explode(const Burst* b) {
     int x = b->x, y = b->y, hue = b->hue & 15, hue2 = (b->hue >> 4) - 1;
@@ -264,6 +276,7 @@ static void explode(const Burst* b) {
     int pat = b->aux & 15, size = b->aux >> 4;
     int S = 300 + size * 80;
     int N = 60 + size * 45;
+    burst_sound(pat, size);
     u32 r = rnd();
     switch (pat) {
     case P_PEONY:                                   // a second color becomes the core
@@ -332,6 +345,7 @@ static void launch_at(int x, int pat, int hue, int size, int apex) {
     int v0 = isqrt(2048 * h);                  // reaches the apex with gravity 4 (8.8)
     add(x << 6, 152 << 6, (int)(rnd() & 31) - 16, -v0, 255, hue, K_ROCKET);
     parts[nparts - 1].aux = pat | (size << 4);
+    sfx_ex(SFX_LAUNCH, fw_vol() * 3 / 4, 240 + (int)(rnd() % 40));
 }
 
 static void launch(int x, int pat, int hue, int size) {
@@ -362,6 +376,7 @@ static const char* msg;
 static int cur_pat, cur_hue = H_RED;
 static int title_cursor, title_wait, title_saved, title_confirm;
 static int ns_idx, ns_wait, ns_end;
+static int ns_volley;                  // shells left in the current volley
 
 void show_enter(void) {
     blank_once();
@@ -394,6 +409,7 @@ void show_enter(void) {
     ns_idx = 0;
     ns_wait = 60;
     ns_end = 0;
+    ns_volley = 0;
 }
 
 static void text_center(u8* page, int y, const char* s, int color) {
@@ -413,9 +429,10 @@ void title_update(u8* back) {
     static const char* const items[3] = { "CONTINUE", "NEW GAME", "FREE PLAY" };
     int first = title_saved ? 0 : 1;   // no CONTINUE without a save
     if (title_cursor < first) title_cursor = first;
-    if (hit & KEY_UP) { title_cursor = title_cursor > first ? title_cursor - 1 : 2; title_confirm = 0; }
-    if (hit & KEY_DOWN) { title_cursor = title_cursor < 2 ? title_cursor + 1 : first; title_confirm = 0; }
+    if (hit & KEY_UP) { title_cursor = title_cursor > first ? title_cursor - 1 : 2; title_confirm = 0; sfx(SFX_MOVE); }
+    if (hit & KEY_DOWN) { title_cursor = title_cursor < 2 ? title_cursor + 1 : first; title_confirm = 0; sfx(SFX_MOVE); }
     if (hit & (KEY_A | KEY_START)) {
+        sfx(SFX_SELECT);
         if (title_cursor == 0) {
             int phase = load_game();
             if (phase >= 0) set_scene(phase == SAVE_DAY ? SC_DAY : SC_SHOP);
@@ -509,16 +526,24 @@ void free_update(u8* back) {
 // --- the night's show: the crate goes up, in the order it was made --------------
 // You do not see whose firework is whose; that comes out at review time.
 
+// Fireworks go up in volleys of two or three, spread across the sky, a few frames apart.
+// The last one goes up alone: the finale.
 void nightshow_update(u8* back) {
     if (ns_idx < ncrate) {
         if (--ns_wait <= 0) {
+            if (!ns_volley) {                          // start a volley
+                int left = ncrate - 1 - ns_idx;        // not counting the finale
+                ns_volley = left <= 0 ? 1 : left >= 5 ? 3 : left >= 2 ? 2 : 1;
+                if (ns_idx + ns_volley > ncrate - 1 && ns_idx < ncrate - 1) ns_volley = ncrate - 1 - ns_idx;
+            }
             const Shell* s = &crate[ns_idx];
-            int n = ncrate;
-            int x = n == 1 ? 120 : 40 + (ns_idx * 160 / (n - 1));
-            x += (int)(rnd() % 21) - 10;
+            int slot = ns_idx % 3;                     // left, middle, right thirds, with some wobble
+            int x = ncrate == 1 || ns_idx == ncrate - 1 ? 120 : 40 + slot * 80 + (int)(rnd() % 31) - 15;
             launch(x, s->pat, s->hue | ((s->hue2 + 1) << 4), s->size);
             ns_idx++;
-            ns_wait = s->pat == P_WILLOW ? 150 : 110;
+            if (--ns_volley) ns_wait = 8 + rnd() % 10;   // the next shell in this volley
+            else if (ns_idx == ncrate - 1) ns_wait = 190;  // a breath before the finale
+            else ns_wait = s->pat == P_WILLOW ? 170 : 140;
         }
     } else if (nparts == 0 && ++ns_end > 40) {
         set_scene(SC_REVIEW);
@@ -668,7 +693,7 @@ static void draw_card(u8* back) {
     // The card drops in from above and settles with a small bounce.
     static const s8 drop[12] = { -126, -96, -68, -44, -24, -8, 3, 6, 4, 2, 1, 0 };
     int ng = rv_ngifts < 3 ? rv_ngifts : 3;
-    int cx = 30, cy = 14 + (t < 12 ? drop[t] : 0), cw = 180, chh = 106 + 9 * ng;
+    int cx = 30, cy = 14 + (t < 12 ? drop[t] : 0), cw = 180, chh = 114 + 9 * ng;   // room for "A: NEXT DAY" inside the border
     box(back, cx, cy, cw, chh);
     hide_box(cx, cy, cw, chh);
     win_on = 1;                        // the card stays solid while the sky glows
@@ -765,6 +790,7 @@ void review_update(u8* back) {
             } else if (rv_t > last + 10) {
                 rv_phase = 1;
                 rv_t = 0;
+                sfx(SFX_PAGE);
                 nparts = 0;
                 REG_BLDCNT = (1 << 2) | (1 << 6) | (1 << 13);   // glow back on for the celebration
             }
@@ -777,6 +803,7 @@ void review_update(u8* back) {
                 spark_ring(x + w / 2, y + h / 2, w, h, bad ? 10 : 24, bad ? 450 : 700,
                            bad ? H_SILVER : rv_tier[i] <= T_SURPRISE ? H_PINK : H_YELLOW);
                 if (bad) shake = 6;
+                sfx_ex(SFX_POP, 56, bad ? 190 : 230 + (int)(rnd() % 60));
             }
     } else {
         if (hit & KEY_A) {
@@ -786,9 +813,16 @@ void review_update(u8* back) {
         for (int k = 0; k < rv_stars; k++)
             if (rv_t == STAR_T0 + k * STAR_GAP) {   // a star lands
                 shake = 5;
+                sfx_ex(SFX_CHIME, 60, 256 + k * 32);
                 flash = 8 + k * 2;
                 flash_hue = H_GOLD;
             }
+        {   // the coins line rolls in with a jingle; each gift gets a little ta-da
+            int tc = STAR_T0 + rv_stars * STAR_GAP + 10 + 16 + 12;
+            if (rv_t == tc && night_coins > 0) sfx(SFX_COINS);
+            for (int i = 0; i < rv_ngifts && i < 3; i++)
+                if (rv_t == tc + 12 + 12 * (i + 1)) sfx_ex(i == 0 && rv_gifts[0][0] == 'N' && rv_gifts[0][4] == 'T' ? SFX_LEVELUP : SFX_CRAFTED, 56, 256);
+        }
         // Four or five stars: fireworks go up on both sides of the card.
         int tv = STAR_T0 + rv_stars * STAR_GAP + 10;
         if (rv_stars >= 4 && rv_t >= tv && rv_t < tv + 160 && (rv_t - tv) % 40 == 0) {
@@ -835,10 +869,10 @@ int review_shake(void) {               // screen offset for this frame's shake
     return shake ? ((shake & 1) ? 2 : -2) : 0;
 }
 
-// --- intro: Grandma hands the shop to her grandson ---------------------------------
+// --- intro: Grandma hands the shop to her grandson, Luke --------------------------
 
 static const char* const intro_pages[] = {
-    "THERE YOU ARE, SWEETHEART! COME HERE, LET ME GET A GOOD LOOK AT YOU.",
+    "THERE YOU ARE, LUKE! COME HERE, SWEETHEART. LET ME GET A GOOD LOOK AT YOU.",
     "FORTY YEARS I'VE RUN THIS LITTLE FIREWORK SHOP. NOW IT'S YOURS. THE TOWN NEEDS ITS FIREWORKS.",
     "EACH NIGHT, YOU OPEN UP. FOLKS COME IN AND TELL YOU WHAT THEY'D LOVE TO SEE IN THE SKY.",
     "YOU BUILD EACH ONE AT THE COUNTER: A SIZE, A PATTERN, A COLOR. (D-PAD TO PICK, A TO CHOOSE, B TO GO BACK.)",
@@ -846,7 +880,7 @@ static const char* const intro_pages[] = {
     "AT CLOSING TIME, IT ALL GOES UP IN ONE BIG SHOW. AFTERWARD, EVERYONE TELLS YOU WHAT THEY THOUGHT.",
     "A LITTLE SECRET: SOME FOLKS LOVE THINGS THEY NEVER ASK FOR. KEEP YOUR EYES OPEN, DEAR.",
     "BY DAY, WALK AROUND TOWN FOR POWDER, SHELLS, AND COLORED STARS. (START OPENS YOUR BAG.)",
-    "NOW GO FLIP THAT SIGN TO OPEN. I'LL BE WATCHING THE SKY. DON'T LET IT GO DARK, DEAR!",
+    "NOW GO FLIP THAT SIGN TO OPEN, LUKE. I'LL BE WATCHING THE SKY. DON'T LET IT GO DARK!",
 };
 #define INTRO_N (int)(sizeof intro_pages / sizeof intro_pages[0])
 static int in_page, in_shown, in_wait;
@@ -881,7 +915,7 @@ void intro_update(u8* back) {
     if (hit & KEY_START) { set_scene(SC_SHOP); return; }      // skip the intro
     if (hit & KEY_A) {
         if (in_shown < in_len) in_shown = in_len;
-        else if (in_page + 1 < INTRO_N) intro_page(in_page + 1);
+        else if (in_page + 1 < INTRO_N) { intro_page(in_page + 1); sfx_ex(SFX_PAGE, 40, 256); }
         else { set_scene(SC_SHOP); return; }
     }
     if (--in_wait <= 0) {                                      // a quiet firework now and then

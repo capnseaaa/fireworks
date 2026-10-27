@@ -11,11 +11,68 @@ int nbursts;
 u32 rng_state = 0x1234567;
 u16 grad[160];
 
+// ---- sound -------------------------------------------------------------------------
+// Sound effects: up to NVOICE samples mixed in software into DirectSound A at 13379 Hz,
+// exactly 224 samples a frame. Music: a pre-rendered song streamed straight to
+// DirectSound B at 18157 Hz, 304 samples a frame. At each VBlank both DMAs restart on the
+// next frame's samples (with the FIFOs reset), then the mixer fills the buffer after it.
+Voice voices[NVOICE];
+const s8* mus_data;
+u32 mus_pos, mus_len;
+static s8 sfx_buf[2][224] __attribute__((aligned(4)));
+static s16 acc[224];
+static s8 silence[352] __attribute__((aligned(4)));
+static int sfx_cur;
+
+#define SNDH_BASE ((1 << 2) | (1 << 8) | (1 << 9) | (1 << 12) | (1 << 13) | (1 << 14))
+
+IWRAM_CODE static void mix(s8* out) {
+    for (int i = 0; i < 224; i++) acc[i] = 0;
+    for (int v = 0; v < NVOICE; v++) {
+        Voice* vo = &voices[v];
+        const s8* d = vo->data;
+        if (!d) continue;
+        u32 pos = vo->pos, end = vo->end, step = vo->step;
+        int vol = vo->vol;
+        for (int i = 0; i < 224; i++) {
+            if (pos >= end) { vo->data = 0; break; }
+            acc[i] += d[pos >> 12] * vol;
+            pos += step;
+        }
+        vo->pos = pos;
+    }
+    for (int i = 0; i < 224; i++) {
+        int x = (acc[i] * 3) >> 8;           // one sound at full volume peaks near 90
+        out[i] = x > 127 ? 127 : x < -127 ? -127 : x;
+    }
+}
+
+IWRAM_CODE static void sound_vblank(void) {
+    *(vu16*)0x040000C6 = 0;
+    *(vu16*)0x040000D2 = 0;
+    *(vu16*)0x04000082 = SNDH_BASE | (1 << 11) | (1 << 15);   // empty both FIFOs
+    *(vu32*)0x040000BC = (u32)sfx_buf[sfx_cur];
+    *(vu32*)0x040000C0 = 0x040000A0;
+    *(vu16*)0x040000C6 = 0xB640;           // on, sound FIFO timing, 32-bit, repeat
+    const s8* m = silence;
+    if (mus_data) {
+        m = mus_data + mus_pos;
+        mus_pos += 304;
+        if (mus_pos + 304 > mus_len) mus_pos = 0;   // songs are a whole number of frames
+    }
+    *(vu32*)0x040000C8 = (u32)m;
+    *(vu32*)0x040000CC = 0x040000A4;
+    *(vu16*)0x040000D2 = 0xB640;
+    sfx_cur ^= 1;
+    mix(sfx_buf[sfx_cur]);
+}
+
 // Called by the BIOS on each interrupt (ARM mode). On HBlank, it sets the backdrop for
 // the next line from VCOUNT, so it stays right even if some HBlanks were missed.
 // (v0.1.0 used HBlank DMA for this; Delta on iOS drew it as colored stripes.)
 IWRAM_CODE void irq_handler(void) {
     u16 f = *(vu16*)0x04000202 & *(vu16*)0x04000200;
+    if (f & 1) sound_vblank();
     if (f & 2) {
         int next = *(vu16*)0x04000006 + 1;
         if (next >= 228) next = 0;

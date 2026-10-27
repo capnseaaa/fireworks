@@ -21,7 +21,7 @@ enum { BT_SCALLOP = 0, BT_GLASS = 4, BT_CORAL = 8, BT_CRYSTAL = 12, BT_DRIFT = 1
 u8 gear[GEAR_COUNT];
 int bag_used;                          // items picked up today (the bag holds bag_size())
 
-int bag_size(void) { return 10 + 10 * gear[GEAR_BAG]; }   // 20, 30, 40
+int bag_size(void) { return 10 + 15 * gear[GEAR_BAG]; }   // 25, 40, 55
 
 enum { N_OAK, N_BIG, N_STUMP, N_BIGSTUMP, N_BUSH, N_BARE, N_KILN, N_TWIG, N_STONE, N_WEEDS, N_FLOWER, N_GONE,
        N_ROCK, N_HARD, N_ORE, N_HOLE, N_UP, N_FORAGE, N_DRIFT, N_POOL, N_DOCK, N_QSTONE, N_CRATE, N_CRATE_OPEN };
@@ -282,6 +282,7 @@ static void pop(int x, int y, const char* s) {
     pops[k][0] = 0;
     cat(pops[k], s);
     pop_x[k] = x; pop_y[k] = y; pop_t[k] = 60;
+    sfx_ex(SFX_PICKUP, 40, 248 + (int)(rnd() % 32));
 }
 
 // Takes n items into the bag; returns how many fit.
@@ -293,7 +294,7 @@ static int take(int n) {
     return n;
 }
 
-static void spend(int minutes) { day_min += minutes; }
+static void spend(int minutes) { day_min += minutes * 3 / 2; }   // a short day: each thing takes a while
 
 static void pop_items(int x, int y, int n, const char* what) {
     char buf[24], *p = cat(buf, "+");
@@ -303,17 +304,22 @@ static void pop_items(int x, int y, int n, const char* what) {
     pop(x, y, buf);
 }
 
+// A star found (the caller took one bag slot): a second comes with it if there's room.
 static void star_pop(int x, int y, int hue) {
-    stock[hue]++;
-    char buf[24], *p = cat(buf, "+1 ");
+    int n = 1 + take(1);
+    stock[hue] += n;
+    char buf[24], *p = cat(buf, "+");
+    p = cat_num(p, n);
+    p = cat(p, " ");
     p = cat(p, hue_names[hue]);
-    cat(p, " STAR");
+    cat(p, n == 1 ? " STAR" : " STARS");
     pop(x, y, buf);
 }
 
 static int bag_full(void) {
     if (bag_used < bag_size()) return 0;
     say_note("MY BAG IS FULL. TIME TO HEAD HOME.");
+    sfx(SFX_NOPE);
     return 1;
 }
 
@@ -407,17 +413,18 @@ static void act(int i) {
         if (bag_full()) return;
         spend(10);
         n->hp = 0;
+        sfx(SFX_SPLASH);
         {
             static const u8 pool_hues[3] = { H_PINK, H_CYAN, H_BLUE };
             int h = pool_hues[rnd() % 3];
-            int got = take(1 + (rnd() & 1));
+            int got = take(2 + (rnd() & 1));
             stock[h] += got;
             char buf[24], *p = cat(buf, "+");
             p = cat_num(p, got);
             p = cat(p, " ");
             cat(p, hue_names[h]);
             pop(x, y - 10, buf);
-            if (rnd() % 100 < 25) {
+            if (rnd() % 100 < 40) {
                 int pat = unlock_pattern();
                 if (pat >= 0) {
                     char m[80], *q = cat(m, "A BOTTLE WITH A SCROLL! NOW I CAN MAKE ");
@@ -435,7 +442,7 @@ static void act(int i) {
     case N_CRATE:
         spend(10);
         n->type = N_CRATE_OPEN;
-        if (rnd() % 100 < 30) {
+        if (rnd() % 100 < 50) {
             int pat = unlock_pattern();
             if (pat >= 0) {
                 char m[80], *q = cat(m, "AN OLD WORKSHOP SCROLL! NOW I CAN MAKE ");
@@ -462,6 +469,8 @@ static void act(int i) {
 // A swing lands: chip the tree or rock, and fell or break it when it runs out.
 static void land_swing(void) {
     Node* n = &nodes[swing_node];
+    int wood = n->type == N_OAK || n->type == N_BIG || n->type == N_STUMP || n->type == N_BIGSTUMP;
+    sfx_ex(wood ? SFX_CHOP : SFX_CLINK, 56, 240 + (int)(rnd() % 40));
     int dmg = field_area == FIELD_MINE ? gear[GEAR_PICK] : gear[GEAR_AXE];
     n->hp = n->hp > dmg ? n->hp - dmg : 0;
     if (n->hp) return;
@@ -478,7 +487,7 @@ static void land_swing(void) {
     if (n->type == N_QSTONE) {
         n->type = N_GONE;
         int h = qstone_hue[n->color];
-        int got = take(n->color == Q_SILVER ? 1 + (gear[GEAR_PICK] >= 3) : 1 + (rnd() & 1));
+        int got = take(n->color == Q_SILVER ? 2 + (gear[GEAR_PICK] >= 3) : 2 + (rnd() & 1));
         stock[h] += got;
         char buf[24], *p = cat(buf, "+");
         p = cat_num(p, got);
@@ -494,7 +503,7 @@ static void land_swing(void) {
             powder += got;
             pop_items(n->x, n->y - 20, got, "POWDER");
         } else {
-            int got = take(1 + (gear[GEAR_PICK] >= 3));
+            int got = take(2 + (gear[GEAR_PICK] >= 3));
             stock[ore_hue[n->color]] += got;
             char buf[24], *p = cat(buf, "+");
             p = cat_num(p, got);
@@ -514,7 +523,7 @@ static void land_swing(void) {
         int got = take(5);
         shells += got;
         pop_items(n->x, n->y - 50, got, "SHELLS");
-        if (rnd() % 100 < 35) {
+        if (rnd() % 100 < 60) {
             int pat = unlock_pattern();
             if (pat >= 0) {
                 char buf[64], *p = cat(buf, "A SCROLL IN THE HOLLOW! NOW I CAN MAKE ");
@@ -584,17 +593,23 @@ static void geode_step(void) {
     if (geode_pos <= 0 || geode_pos >= 100) geode_v = -geode_v;
     if (hit & KEY_A) {
         int d = geode_pos > 50 ? geode_pos - 50 : 50 - geode_pos;
+        sfx_ex(SFX_CRACK, 60, d < 5 ? 300 : 256);
         char* p = geode_res[geode_n];
         static const u8 rare[3] = { H_VIOLET, H_SILVER, H_CYAN }, common[3] = { H_RED, H_BLUE, H_GREEN };
-        if (d < 5 && take(1)) {
+        int g;
+        if (d < 5 && (g = take(2))) {
             int h = rare[rnd() % 3];
-            stock[h]++;
-            p = cat(p, "PERFECT! 1 ");
+            stock[h] += g;
+            p = cat(p, "PERFECT! ");
+            p = cat_num(p, g);
+            p = cat(p, " ");
             cat(p, hue_names[h]);
-        } else if (d < 18 && take(1)) {
+        } else if (d < 18 && (g = take(2))) {
             int h = common[rnd() % 3];
-            stock[h]++;
-            p = cat(p, "GOOD. 1 ");
+            stock[h] += g;
+            p = cat(p, "GOOD. ");
+            p = cat_num(p, g);
+            p = cat(p, " ");
             cat(p, hue_names[h]);
         } else {
             if (take(1)) powder++;
@@ -652,6 +667,7 @@ static void hook_step(void) {
                     else hook_got++;
                     log_kind[k] = 0;
                     hook_caught = 1;
+                    sfx(SFX_PICKUP);
                     break;
                 }
         if (--hook_t == 0 && hook_casts == 0) {           // the last cast is back
@@ -676,6 +692,7 @@ static void hook_step(void) {
     if ((hit & KEY_A) && hook_casts) {                    // drop the hook
         hook_casts--;
         hook_t = 20;
+        sfx_ex(SFX_SPLASH, 48, 300);
         hook_caught = 0;
     }
 }
@@ -721,9 +738,10 @@ static void climb_start(void) {
 static void climb_end(void) {
     char buf[96], *p = buf;
     int got = 0;
-    if (climb_h >= 4 && take(1)) { stock[H_WHITE]++; got++; }
-    if (climb_h >= 7 && take(1)) { stock[H_SILVER]++; got++; }
-    if (climb_h >= CLIMB_TOP && take(1)) { stock[H_GOLD]++; got++; }
+    int g;
+    if (climb_h >= 4 && (g = take(2))) { stock[H_WHITE] += g; got += g; }
+    if (climb_h >= 7 && (g = take(2))) { stock[H_SILVER] += g; got += g; }
+    if (climb_h >= CLIMB_TOP && (g = take(2))) { stock[H_GOLD] += g; got += g; }
     if (climb_h >= CLIMB_TOP) p = cat(p, "MADE IT TO THE TOP! ");
     else if (climb_h >= 4) p = cat(p, "A GOOD CLIMB. ");
     else p = cat(p, "I SLIPPED BACK DOWN. ");
@@ -732,7 +750,7 @@ static void climb_end(void) {
         p = cat_num(p, got);
         p = cat(p, got == 1 ? " STAR IN THE CRACKS." : " STARS IN THE CRACKS.");
     }
-    if (climb_h >= CLIMB_TOP && rnd() % 100 < 35) {
+    if (climb_h >= CLIMB_TOP && rnd() % 100 < 60) {
         int pat = unlock_pattern();
         if (pat >= 0) { p = cat(p, " AN EAGLE'S NEST HELD A SCROLL: "); p = cat(p, pat_plural[pat]); cat(p, "!"); }
     }
@@ -747,8 +765,8 @@ static void climb_step(void) {
     if (climb_flash) climb_flash--;
     u16 press = hit & (KEY_L | KEY_R | KEY_UP);
     if (press) {
-        if (press == climb_keys[climb_key]) { climb_h++; climb_flash = 8; }
-        else { climb_miss++; if (climb_h) climb_h--; }
+        if (press == climb_keys[climb_key]) { climb_h++; climb_flash = 8; sfx_ex(SFX_SELECT, 56, 240 + climb_h * 16); }
+        else { climb_miss++; if (climb_h) climb_h--; sfx(SFX_NOPE); }
         if (climb_h >= CLIMB_TOP || climb_miss >= 3) { climb_end(); return; }
         climb_next();
     } else if (--climb_left <= 0) {                        // too slow: slip a hold

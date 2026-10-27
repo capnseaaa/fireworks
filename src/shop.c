@@ -37,10 +37,10 @@ const char* const cust_names[] = {
 
 u8 upg[UPG_COUNT];
 const Upgrade upgrades[UPG_COUNT] = {
-    { "WORKBENCH", "FIREWORKS TAKE 15% LESS TIME.", 3, { 80, 160, 300 }, { 0, 1, 2 } },
-    { "LATE HOURS", "STAY OPEN ONE HOUR LATER.", 2, { 100, 220 }, { 0, 2 } },
-    { "SHOP SIGN", "CUSTOMERS PAY 15% MORE.", 2, { 120, 250 }, { 0, 2 } },
-    { "DISPLAY SHELF", "NOTICE WHAT CUSTOMERS SECRETLY LOVE.", 1, { 150 }, { 1 } },
+    { "WORKBENCH", "FIREWORKS TAKE 15% LESS TIME.", 3, { 55, 110, 210 }, { 0, 1, 2 } },
+    { "LATE HOURS", "STAY OPEN ONE HOUR LATER.", 2, { 70, 155 }, { 0, 2 } },
+    { "SHOP SIGN", "CUSTOMERS PAY 15% MORE.", 2, { 85, 175 }, { 0, 2 } },
+    { "DISPLAY SHELF", "NOTICE WHAT CUSTOMERS SECRETLY LOVE.", 1, { 105 }, { 1 } },
 };
 const char* const rep_titles[4] = { "NEWCOMER", "LOCAL FAVORITE", "TOWN TREASURE", "LEGEND" };
 
@@ -322,7 +322,7 @@ static char* like_words(char* p, const Shell* s) {
 static char* give_gift(char* p) {
     u32 r = rnd() % 100;
     u16 locked = ((1 << P_COUNT) - 1) & ~known;
-    if (r < 30 && locked) {
+    if (r < 50 && locked) {
         int pat = unlock_pattern();
         p = cat(p, "NEW SCROLL: ");
         return cat(p, pat_plural[pat]);
@@ -619,10 +619,14 @@ static int menu_update(void) {
     if (st_t == 1 && !menu_ok[cursor])            // start on something you can pick
         for (int i = 0; i < menu_n; i++)
             if (menu_ok[i]) { cursor = i; build_menu(); break; }
-    if (hit & KEY_UP) cursor = (cursor + menu_n - 1) % menu_n;
-    if (hit & KEY_DOWN) cursor = (cursor + 1) % menu_n;
-    if (hit & KEY_B) return -2;
-    if ((hit & KEY_A) && menu_ok[cursor]) return menu_val[cursor];
+    if (hit & KEY_UP) { cursor = (cursor + menu_n - 1) % menu_n; sfx(SFX_MOVE); }
+    if (hit & KEY_DOWN) { cursor = (cursor + 1) % menu_n; sfx(SFX_MOVE); }
+    if (hit & KEY_B) { sfx(SFX_BACK); return -2; }
+    if (hit & KEY_A) {
+        if (!menu_ok[cursor]) { sfx(SFX_NOPE); return -1; }
+        sfx(SFX_SELECT);
+        return menu_val[cursor];
+    }
     return -1;
 }
 
@@ -672,6 +676,7 @@ static void next_customer(void) {
     cx = 244;
     show_cust = 1;
     bubble = -1;
+    sfx_ex(SFX_DOOR, 44, 256);
     go(ST_ARRIVE);
 }
 
@@ -788,12 +793,15 @@ static void step(void) {
             say(0, buf);
             dlg_shown = dlg_len;
             bubble = BUB_SPARK;
+            sfx(SFX_CLOTH);
             go(ST_CRAFT);
         }
         break;
     case ST_CRAFT:
         shop_min = craft_from + craft_cost * st_t / 72;
+        if (st_t == 22 || st_t == 44) sfx_ex(SFX_CLINK, 30, 300 + st_t * 2);   // packing the shell
         if (st_t >= 72) {
+            sfx(SFX_CRAFTED);
             shop_min = craft_from + craft_cost;
             if (ncrate < MAXCRATE) {
                 Shell* s = &crate[ncrate++];
@@ -835,8 +843,8 @@ static void step(void) {
     case ST_ORDER:
         // A picks a firework up or puts it down; while held, it moves with the cursor.
         // The row after the last firework is BEGIN THE SHOW, where the cursor starts.
-        if ((hit & KEY_START) || ((hit & KEY_A) && cursor == ncrate)) { set_scene(SC_SHOW); break; }
-        if (hit & KEY_A) held = held < 0 ? cursor : -1;
+        if ((hit & KEY_START) || ((hit & KEY_A) && cursor == ncrate)) { sfx(SFX_SELECT); set_scene(SC_SHOW); break; }
+        if (hit & KEY_A) { held = held < 0 ? cursor : -1; sfx(held >= 0 ? SFX_SELECT : SFX_CLOTH); }
         {
             int to = cursor, last = held >= 0 ? ncrate - 1 : ncrate;
             if (hit & KEY_UP) to = cursor > 0 ? cursor - 1 : cursor;
@@ -845,6 +853,7 @@ static void step(void) {
                 Shell t = crate[cursor]; crate[cursor] = crate[to]; crate[to] = t;
                 held = to;
             }
+            if (to != cursor) sfx(SFX_MOVE);
             cursor = to;
         }
         break;

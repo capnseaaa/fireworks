@@ -65,7 +65,7 @@ void dev_update(u8* back) {
         case D_DAY: set_scene(SC_DAY); return;
         case D_NIGHT: set_scene(SC_SHOP); return;
         case D_LATE:
-            if (dev_from == SC_DAY || dev_from == SC_FIELD) { day_min = 590; day_return(); return; }
+            if (dev_from == SC_DAY || dev_from == SC_FIELD) { day_min = DAY_END_MIN - 10; day_return(); return; }
             done("ONLY WORKS FROM THE DAY.");
             break;
         case D_MINE9: mine_deepest = 9; done("THE MINE REMEMBERS FLOOR 9."); break;

@@ -1,0 +1,3 @@
+# Sound: the title song for a few seconds, then into the free-play show with launches.
+240 0 s0.ppm
+1 0 @$mus_pos,$mus_len,$voices

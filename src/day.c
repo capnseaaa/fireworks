@@ -1,12 +1,12 @@
-// The day: walk the town map from 8 AM to 6 PM, gathering materials and buying
+// The day: walk the town map from 10 AM to 6 PM, gathering materials and buying
 // supplies for tonight. Every trip and every job costs time; each spot works once a day,
 // and some spots need a tool from the market first.
 #include "game.h"
 #include "art.h"
 
 #define T_MAPSPR 512                   // arrow, player (16x16 each, 4 tiles)
-#define DAY_END 600                    // minutes after 8:00 AM: 6:00 PM
-#define TRAVEL 20                      // minutes to walk anywhere
+#define DAY_END 480                    // minutes after 10:00 AM: 6:00 PM
+#define TRAVEL 25                      // minutes to walk anywhere
 
 int tools;                             // TOOL_* bits
 
@@ -40,8 +40,8 @@ static const Spot spots[] = {
     { A_MARKET, K_BUY_STAR, 10, 0, 8, "1 STAR", "ONE COLORED STAR. PICK THE COLOR." },
     { A_MARKET, K_BUY_PICK, 10, 0, 0, "PICKAXE", "BREAKS ROCKS IN THE MINE. BETTER ONES BREAK HARD ROCK FASTER." },
     { A_MARKET, K_BUY_LANTERN, 10, 0, 0, "LANTERN", "LIGHTS THE MINE BELOW FLOOR 4." },
-    { A_MARKET, K_BUY_NET, 10, 0, 50, "NET", "REACHES INTO THE BEACH'S TIDE POOLS." },
-    { A_MARKET, K_BUY_ROPE, 10, 0, 80, "ROPE", "OPENS THE QUARRY." },
+    { A_MARKET, K_BUY_NET, 10, 0, 0, "NET", "REACHES INTO THE BEACH'S TIDE POOLS." },
+    { A_MARKET, K_BUY_ROPE, 10, 0, 0, "ROPE", "OPENS THE QUARRY." },
     { A_MARKET, K_BUY_AXE, 10, 0, 0, "AXE", "A SHARPER AXE: FEWER SWINGS, AND IT FELLS THE OLD TREE." },
     { A_MARKET, K_BUY_BAG, 10, 0, 0, "BAG", "A BIGGER BAG: CARRY MORE HOME EACH DAY." },
 };
@@ -50,7 +50,7 @@ static const Spot spots[] = {
 enum { DS_INTRO, DS_MAP, DS_AREA, DS_COLOR, DS_WORK, DS_RESULT, DS_DUSK, DS_UPGRADE };
 
 int day_st;                            // state (non-static so test scripts can read it)
-int day_min;                           // minutes since 8:00 AM
+int day_min;                           // minutes since 10:00 AM
 static int st_t, here, sel, cursor, bag_open;
 static int work_spot, work_from, work_price;
 static u32 used;                       // spots done today (bit per spot)
@@ -81,13 +81,55 @@ static int is_tool(int k) { return k == K_BUY_NET || k == K_BUY_ROPE; }
 static int tool_bit(int k) { return k == K_BUY_NET ? TOOL_NET : TOOL_ROPE; }
 
 // Gear prices go up with each tier; 0 once you have the best.
-static int price_of(int i) {
-    int k = spots[i].kind;
-    if (k == K_BUY_AXE) return gear[GEAR_AXE] == 1 ? 100 : gear[GEAR_AXE] == 2 ? 250 : 0;
-    if (k == K_BUY_BAG) return gear[GEAR_BAG] == 1 ? 80 : gear[GEAR_BAG] == 2 ? 200 : 0;
-    if (k == K_BUY_PICK) return gear[GEAR_PICK] == 0 ? 60 : gear[GEAR_PICK] == 1 ? 150 : gear[GEAR_PICK] == 2 ? 300 : 0;
-    if (k == K_BUY_LANTERN) return gear[GEAR_LANTERN] ? 0 : 120;
-    return spots[i].price;
+// Gear costs coins plus something gathered. mat: a star color 0..11, MAT_SHELLS, MAT_POWDER,
+// or -1 for none. Returns 0 coins (and no material) once you have the best.
+enum { MAT_SHELLS = 12, MAT_POWDER = 13 };
+typedef struct { u16 coins; s8 mat; u8 n; } Cost;
+
+static Cost gear_cost(int i) {
+    Cost c = { spots[i].price, -1, 0 };
+    switch (spots[i].kind) {
+    case K_BUY_AXE:
+        if (gear[GEAR_AXE] == 1) c = (Cost){ 55, MAT_SHELLS, 4 };
+        else if (gear[GEAR_AXE] == 2) c = (Cost){ 140, H_SILVER, 2 };
+        else c = (Cost){ 0, -1, 0 };
+        break;
+    case K_BUY_BAG:
+        if (gear[GEAR_BAG] == 1) c = (Cost){ 50, H_GREEN, 2 };
+        else if (gear[GEAR_BAG] == 2) c = (Cost){ 125, H_VIOLET, 2 };
+        else c = (Cost){ 0, -1, 0 };
+        break;
+    case K_BUY_PICK:
+        if (gear[GEAR_PICK] == 0) c = (Cost){ 35, -1, 0 };
+        else if (gear[GEAR_PICK] == 1) c = (Cost){ 85, H_BLUE, 3 };
+        else if (gear[GEAR_PICK] == 2) c = (Cost){ 180, H_SILVER, 2 };
+        else c = (Cost){ 0, -1, 0 };
+        break;
+    case K_BUY_LANTERN: c = gear[GEAR_LANTERN] ? (Cost){ 0, -1, 0 } : (Cost){ 70, H_YELLOW, 2 }; break;
+    case K_BUY_NET: c = (Cost){ 30, H_GREEN, 3 }; break;
+    case K_BUY_ROPE: c = (Cost){ 40, MAT_SHELLS, 3 }; break;
+    }
+    return c;
+}
+
+static int price_of(int i) { return gear_cost(i).coins; }
+static Cost work_cost;                 // what the purchase in progress takes
+
+static int mat_have(int m) { return m == MAT_SHELLS ? shells : m == MAT_POWDER ? powder : m >= 0 ? stock[m] : 0; }
+
+static void mat_take(int m, int n) {
+    if (m == MAT_SHELLS) shells -= n;
+    else if (m == MAT_POWDER) powder -= n;
+    else if (m >= 0) stock[m] -= n;
+}
+
+static char* mat_name(char* p, int m, int n) {
+    p = cat_num(p, n);
+    p = cat(p, " ");
+    if (m == MAT_SHELLS) return cat(p, "SHELLS");
+    if (m == MAT_POWDER) return cat(p, "POWDER");
+    p = cat(p, hue_names[m]);
+    return cat(p, n == 1 ? " STAR" : " STARS");
 }
 
 static int is_buy(int i) { return spots[i].kind >= K_BUY_POWDER; }
@@ -117,13 +159,17 @@ static const char* blocked(int i) {
         return s->needs == TOOL_NET ? "NEEDS A NET" : "NEEDS A ROPE";
     if (is_tool(s->kind) && (tools & tool_bit(s->kind))) return "YOU HAVE ONE";
     if (is_buy(i) && coins < price_of(i)) return "NOT ENOUGH COINS";
+    if (is_buy(i)) {
+        Cost c = gear_cost(i);
+        if (c.mat >= 0 && mat_have(c.mat) < c.n) return "NOT ENOUGH MATERIALS";
+    }
     if (!is_buy(i) && (used & (1u << i))) return "DONE FOR TODAY";
     if (day_min + s->minutes > DAY_END) return "NOT ENOUGH DAYLIGHT";
     return 0;
 }
 
 static char* time_str(char* p, int m) {
-    int h = 8 + m / 60, mm = m % 60;
+    int h = 10 + m / 60, mm = m % 60;
     int pm = h >= 12;
     int hh = h % 12;
     if (hh == 0) hh = 12;
@@ -225,8 +271,11 @@ static int area_toward(int dx, int dy) {
 static void step(void) {
     st_t++;
     int a = hit & KEY_A, b = hit & KEY_B;
-    if (hit & KEY_START) bag_open ^= 1;
-    if (bag_open) { if (a || b) bag_open = 0; return; }
+    if (hit & KEY_START) { bag_open ^= 1; sfx(bag_open ? SFX_CLOTH : SFX_BACK); }
+    if (bag_open) { if (a || b) { bag_open = 0; sfx(SFX_BACK); } return; }
+    // Menu sounds: every state moves a cursor with the d-pad.
+    if (hit & (KEY_UP | KEY_DOWN | KEY_LEFT | KEY_RIGHT)) sfx(SFX_MOVE);
+    if (b && day_st != DS_INTRO && day_st != DS_RESULT && day_st != DS_DUSK) sfx(SFX_BACK);
     switch (day_st) {
     case DS_INTRO:
         if (a) go(DS_MAP);
@@ -237,6 +286,7 @@ static void step(void) {
         if (hit & KEY_UP) sel = area_toward(0, -1);
         if (hit & KEY_DOWN) sel = area_toward(0, 1);
         if (a) {
+            sfx(SFX_SELECT);
             // Walking always works; if it takes you past sunset, the day ends.
             day_min += sel == here ? 0 : TRAVEL;
             here = sel;
@@ -253,8 +303,9 @@ static void step(void) {
         if (b) { go(DS_MAP); break; }
         if (!a) break;
         int i = menu_spot[cursor];
-        if (i < 0) { go(DS_MAP); break; }
-        if (blocked(i)) break;
+        if (i < 0) { sfx(SFX_BACK); go(DS_MAP); break; }
+        if (blocked(i)) { sfx(SFX_NOPE); break; }
+        sfx(spots[i].kind == K_OPEN ? SFX_DOOR : SFX_SELECT);
         if (spots[i].kind == K_OPEN) { set_scene(SC_SHOP); break; }
         if (spots[i].kind == K_UPGRADE) { go(DS_UPGRADE); cursor = 0; break; }
         if (spots[i].kind == K_EXPLORE) { field_go(FIELD_FOREST); break; }
@@ -267,6 +318,7 @@ static void step(void) {
         work_spot = i;
         work_from = day_min;
         work_price = price_of(i);
+        work_cost = gear_cost(i);
         go(DS_WORK);
         break;
     }
@@ -274,7 +326,9 @@ static void step(void) {
         if (hit & KEY_UP) cursor = (cursor + NCOLORS - 1) % NCOLORS;
         if (hit & KEY_DOWN) cursor = (cursor + 1) % NCOLORS;
         if (b) { area_menu(); cursor = 0; go(DS_AREA); break; }
+        if (a && coins < 8) sfx(SFX_NOPE);
         if (a && coins >= 8) {
+            sfx(SFX_COINS);
             coins -= 8;
             stock[cursor]++;
             day_min += 2;
@@ -285,7 +339,9 @@ static void step(void) {
         if (hit & KEY_UP) cursor = (cursor + UPG_COUNT) % (UPG_COUNT + 1);
         if (hit & KEY_DOWN) cursor = (cursor + 1) % (UPG_COUNT + 1);
         if (b || (a && cursor == UPG_COUNT)) { area_menu(); cursor = 0; go(DS_AREA); break; }
+        if (a && cursor < UPG_COUNT && upg_blocked(cursor)) sfx(SFX_NOPE);
         if (a && !upg_blocked(cursor)) {
+            sfx(SFX_LEVELUP);
             const Upgrade* u = &upgrades[cursor];
             coins -= u->price[upg[cursor]];
             upg[cursor]++;
@@ -306,7 +362,11 @@ static void step(void) {
         day_min = work_from + s->minutes * st_t / len;
         if (st_t >= len) {
             day_min = work_from + s->minutes;
-            if (is_buy(work_spot)) coins -= work_price;
+            if (is_buy(work_spot)) {
+                coins -= work_price;
+                if (work_cost.mat >= 0) mat_take(work_cost.mat, work_cost.n);
+                sfx(s->kind >= K_BUY_PICK ? SFX_LEVELUP : SFX_COINS);   // new gear is a big moment
+            }
             else used |= 1u << work_spot;
             msg[0] = 0;
             do_spot(work_spot);
@@ -316,6 +376,7 @@ static void step(void) {
     }
     case DS_RESULT:
         if (a) {
+            sfx(SFX_SELECT);
             if (day_min >= DAY_END - 15) dusk();
             else if (upg_result) {
                 upg_result = 0;
@@ -454,8 +515,19 @@ static void draw_page(u8* back) {
         text(back, 8, 121, areas[here].name, UI_YELLOW);
         if (i < 0) draw_lines(back, "BACK TO THE MAP.", 130, 2, UI_WHITE);
         else {
-            draw_lines(back, spots[i].desc, 130, 2, UI_WHITE);
             const char* why = blocked(i);
+            Cost c = is_buy(i) ? gear_cost(i) : (Cost){ 0, -1, 0 };
+            if (c.mat >= 0) {
+                // Gear: one line of description, then what it takes and what you have.
+                char d[1][41];
+                if (wrap(spots[i].desc, 37, d, 1)) text(back, 8, 130, d[0], UI_WHITE);
+                p = cat(buf, "NEEDS ");
+                p = mat_name(p, c.mat, c.n);
+                p = cat(p, " (HAVE ");
+                p = cat_num(p, mat_have(c.mat));
+                cat(p, ")");
+                text(back, 8, 139, buf, mat_have(c.mat) >= c.n ? UI_GREEN : UI_RED);
+            } else draw_lines(back, spots[i].desc, 130, 2, UI_WHITE);
             p = buf;
             if (spots[i].minutes && spots[i].kind != K_OPEN) { p = cat_num(p, spots[i].minutes); p = cat(p, " MIN"); }
             if (why) { if (p != buf) p = cat(p, "  "); cat(p, why); }

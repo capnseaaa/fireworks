@@ -1,4 +1,4 @@
-// Fireworks: a cozy firework shop. Boot, the main loop, sprites, and scene switching.
+// Starbloom: a cozy firework shop. Boot, the main loop, sprites, and scene switching.
 // Every scene draws a whole mode 4 page each frame; the pages flip at VBlank.
 #include "game.h"
 
@@ -34,6 +34,20 @@ static void wait_vblank(void) {
     while (REG_VCOUNT < 160);
 }
 
+extern int field_area;
+
+// Each scene's song. The intro carries on the title's; the dev menu keeps whatever plays.
+static void scene_music(int s) {
+    switch (s) {
+    case SC_TITLE: case SC_INTRO: music(SONG_TITLE); break;
+    case SC_FREE: case SC_SHOW: music(SONG_SHOW); break;
+    case SC_SHOP: music(SONG_SHOP); break;
+    case SC_REVIEW: music(SONG_REVIEW); break;
+    case SC_DAY: music(SONG_DAY); break;
+    case SC_FIELD: music(field_area == FIELD_MINE || field_area == FIELD_GEODES ? SONG_MINE : SONG_DAY); break;
+    }
+}
+
 static void enter(int s) {
     int from = scene;
     scene = s;
@@ -48,6 +62,7 @@ static void enter(int s) {
         if (from == SC_SHOP) show_enter();   // a night with no show
         review_begin();
     }
+    scene_music(s);
 }
 
 int main(void) {
@@ -60,8 +75,9 @@ int main(void) {
     REG_BG2PA = 256; REG_BG2PB = 0; REG_BG2PC = 0; REG_BG2PD = 256;
     REG_BG2X = 0; REG_BG2Y = 0;
     IRQ_VECTOR = (u32)irq_handler;
-    REG_DISPSTAT = 1 << 4;         // HBlank interrupt (sky gradient)
-    REG_IE = 2;
+    sound_init();
+    REG_DISPSTAT = (1 << 3) | (1 << 4);   // VBlank (sound) and HBlank (sky gradient) interrupts
+    REG_IE = 3;
     REG_IF = 0xFFFF;
     REG_IME = 1;
     new_game();
@@ -81,6 +97,7 @@ int main(void) {
 
         REG_TM2CNT = 0; REG_TM2D = 0; REG_TM2CNT = 0x81;   // time this frame's work
         frame++;
+        sound_frame();
         keys = ~REG_KEYINPUT & 0x3FF;
         hit = keys & ~prev;
         prev = keys;

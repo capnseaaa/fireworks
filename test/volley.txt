@@ -1,0 +1,42 @@
+# The show in volleys: 7 fireworks written into the crate, then straight to the show.
+40 0
+1 0 !$crate+0=65536,$crate+4=255,$crate+8=16777215,$crate+12=33619968,$crate+16=458753,$crate+20=-65536,$crate+24=255,$crate+28=131586,$crate+32=255,$crate+36=16777215,$crate+40=100925440,$crate+44=589824,$crate+48=-65536,$crate+52=255,$crate+56=67846,$crate+60=10,$crate+64=16777215,$crate+68=117440512,$crate+72=131074,$crate+76=-65536,$crate+80=255,$crate+84=131841,$crate+88=0,$crate+92=16777215,$crate+96=0
+1 0 !$ncrate=7,$night=1
+1 0 !$next_scene=3
+10 0
+60 0
+1 0 v00.ppm
+1 0 @$ns_idx,$nparts,$cpu_ticks
+60 0
+1 0 v01.ppm
+1 0 @$ns_idx,$nparts,$cpu_ticks
+60 0
+1 0 v02.ppm
+1 0 @$ns_idx,$nparts,$cpu_ticks
+60 0
+1 0 v03.ppm
+1 0 @$ns_idx,$nparts,$cpu_ticks
+60 0
+1 0 v04.ppm
+1 0 @$ns_idx,$nparts,$cpu_ticks
+60 0
+1 0 v05.ppm
+1 0 @$ns_idx,$nparts,$cpu_ticks
+60 0
+1 0 v06.ppm
+1 0 @$ns_idx,$nparts,$cpu_ticks
+60 0
+1 0 v07.ppm
+1 0 @$ns_idx,$nparts,$cpu_ticks
+60 0
+1 0 v08.ppm
+1 0 @$ns_idx,$nparts,$cpu_ticks
+60 0
+1 0 v09.ppm
+1 0 @$ns_idx,$nparts,$cpu_ticks
+60 0
+1 0 v10.ppm
+1 0 @$ns_idx,$nparts,$cpu_ticks
+60 0
+1 0 v11.ppm
+1 0 @$ns_idx,$nparts,$cpu_ticks

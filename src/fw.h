@@ -55,6 +55,13 @@ static inline u32 rnd(void) {
 
 extern u16 grad[160];     // sky color per scanline, set by the HBlank interrupt
 
+// A sound effect playing. pos, end, and step are 20.12 fixed point sample positions.
+typedef struct { const s8* data; u32 pos, end, step; int vol; u32 age; } Voice;
+#define NVOICE 6
+extern Voice voices[NVOICE];
+extern const s8* mus_data;          // the song streaming to DirectSound B, or 0
+extern u32 mus_pos, mus_len;
+
 // Moves every particle one frame and draws it into a mode 4 page. Lives in IWRAM.
 __attribute__((long_call)) void step_draw(u8* page);
 // Clears a mode 4 page with the CPU, so the HBlank interrupt is never held up by DMA.
