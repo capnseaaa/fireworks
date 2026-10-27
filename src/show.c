@@ -265,7 +265,8 @@ static void burst_sound(int pat, int size) {
     static const u8 booms[3] = { SFX_BOOM_S, SFX_BOOM_M, SFX_BOOM_L };
     int v = fw_vol(), late = 4 + (int)(rnd() % 6);
     sfx_later(booms[size], v + v / 3, 236 + (int)(rnd() % 40), late);   // the pop leads
-    if (pat == P_CRACKLE) sfx_later(SFX_CRACKLE, v * 3 / 4, 256, late + 24);
+    if (pat == P_CRACKLE) sfx_later(SFX_CRACKLE, v * 3 / 4, 256, late + 34);   // as the stars start to pop
+    if (pat == P_CROSS) sfx_later(SFX_SPLIT, v, 236 + (int)(rnd() % 40), late + 34);  // as the stars split
     // The sparkly ones shimmer as their stars drift and twinkle.
     if (pat == P_GLITTER || pat == P_WILLOW || pat == P_CHRYS)
         sfx_later(SFX_GLITTER, pat == P_GLITTER ? v / 2 : v * 2 / 5, 240 + (int)(rnd() % 32), late + 10);

@@ -35,7 +35,7 @@ IMPORTS = {
     "cloth":   (RPG + "cloth1.ogg", 0.35, 0.7),
 }
 # Rendered by tools/synth.c into build/audio at 13379 Hz.
-SYNTH = ["launch", "boom_s", "boom_m", "boom_l", "crackle", "glitter", "pop", "chime", "splash", "crafted"]
+SYNTH = ["launch", "boom_s", "boom_m", "boom_l", "crackle", "glitter", "split", "pop", "chime", "splash", "crafted"]
 SFX = SYNTH + list(IMPORTS)
 # Rendered by synth.c from tools/make_music.py at 18157 Hz. They all loop.
 SONGS = ["title", "day", "forest", "beach", "quarry", "mine", "shop", "show", "review"]

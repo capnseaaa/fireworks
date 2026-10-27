@@ -190,20 +190,36 @@ static void bird(double* b, long n, long at, double amp) {
     }
 }
 
-// A drip in the mine: a small falling plink.
+// A drip in the mine: a water drop's "plop", its pitch rising as the bubble rings.
 static void drip(double* b, long n, long at, double amp) {
-    double f = 1300 + 900 * frand(), ph = 0;
-    for (long i = 0; i < (long)(0.12 * R); i++) {
+    double f0 = 650 + 400 * frand(), ph = 0;
+    for (long i = 0; i < (long)(0.09 * R); i++) {
         double t = i / R;
-        ph += 2 * PI * f * (1 + 0.6 * exp(-t / 0.01)) / R;
-        put(b, n, at + i, amp * sin(ph) * exp(-t / 0.03));
+        double f = f0 * (2.2 - 1.2 * exp(-t / 0.012));
+        ph += 2 * PI * f / R;
+        put(b, n, at + i, amp * sin(ph) * exp(-t / 0.025) * (t < 0.002 ? t / 0.002 : 1));
     }
 }
 
+// A woodpecker somewhere off in the trees: a quick run of knocks.
+static void woodpecker(double* b, long n, long at, double amp) {
+    int knocks = 8 + (int)(frand() * 8);
+    double rate = 14 + 6 * frand();
+    for (int k = 0; k < knocks; k++) {
+        long t0 = at + (long)(k * R / rate);
+        double ph = 0, a = amp * (1 - 0.4 * k / knocks);
+        for (long i = 0; i < (long)(0.02 * R); i++) {
+            double t = i / R;
+            ph += 2 * PI * 1100 / R;
+            put(b, n, t0 + i, a * (sin(ph) + 0.5 * noise()) * exp(-t / 0.004));
+        }
+    }
+}
 static void ambience(double* mix, long n, int kind, double level) {
     if (kind == AMB_NONE) return;
     double* a = calloc(n, sizeof(double));
     double* env = calloc(n, sizeof(double));
+    double* drips = calloc(n, sizeof(double));
     rs = 2024 + kind;
     double secs = n / R;
     if (kind == AMB_BEACH) {
@@ -219,7 +235,7 @@ static void ambience(double* mix, long n, int kind, double level) {
             t += 6 + 2 * frand();
         }
     }
-    double lp = 0, lp2 = 0, hp = 0;
+    double lp = 0, lp2 = 0;
     long bird_next = (long)(R * (1 + 3 * frand()));
     for (int pass = 0; pass < 2; pass++)
         for (long i = 0; i < n; i++) {
@@ -237,20 +253,14 @@ static void ambience(double* mix, long n, int kind, double level) {
                 double c = 90 / R * 2 * PI;
                 lp += (nz - lp) * c; lp2 += (lp - lp2) * c;
                 x = lp2 * 6;
-            } else if (kind == AMB_FOREST) {     // leaves rustling now and then
-                double c = 1500 / R * 2 * PI;
-                lp += (nz - lp) * c;
-                double h = lp - hp; hp += (lp - hp) * 0.05;
-                double sway = pow(0.5 + 0.5 * sin(2 * PI * i / n * 7), 3);
-                x = h * 0.6 * sway;
             }
             if (pass) a[i] += x;
         }
     // Birds in town and the forest; drips in the mine; a gull now and then at the beach.
-    double every = kind == AMB_FOREST ? 2.5 : kind == AMB_TOWN ? 5.0 : kind == AMB_MINE ? 3.0 : kind == AMB_BEACH ? 14.0 : 0;
+    double every = kind == AMB_FOREST ? 2.5 : kind == AMB_TOWN ? 5.0 : kind == AMB_MINE ? 5.0 : kind == AMB_BEACH ? 14.0 : 0;
     if (every > 0)
         for (long at = bird_next; at < n; at += (long)(R * every * (0.5 + frand()))) {
-            if (kind == AMB_MINE) drip(a, n, at, 0.5);
+            if (kind == AMB_MINE) drip(drips, n, at, 0.5);
             else if (kind == AMB_BEACH) {        // a far-off gull: two falling cries
                 for (int c = 0; c < 2; c++) {
                     double ph = 0, len = 0.35;
@@ -260,14 +270,27 @@ static void ambience(double* mix, long n, int kind, double level) {
                         put(a, n, at + (long)(c * 0.45 * R) + i, 0.25 * (sin(ph) + 0.4 * sin(2 * ph)) * sin(PI * u));
                     }
                 }
-            } else bird(a, n, at, kind == AMB_FOREST ? 0.45 : 0.3);
+            } else {
+                bird(a, n, at, kind == AMB_FOREST ? 0.45 : 0.3);
+                if (kind == AMB_FOREST && frand() < 0.15) woodpecker(a, n, at + (long)(R * 1.2), 0.35);
+            }
         }
+    if (kind == AMB_MINE) {                  // the drips echo off the cave walls
+        Verb v;
+        verb_init(&v, 1.8, 0.0, 0.3);
+        for (int k = 0; k < 4; k++) v.c[k].fb = 0.86;
+        for (int pass = 0; pass < 2; pass++)
+            for (long i = 0; i < n; i++) {
+                double w = verb_step(&v, drips[i]);
+                if (pass) a[i] += drips[i] + w * 1.5;
+            }
+    }
     // Scale against the song: the place sits under the tune, not over it.
     double ms = 0, as = 0;
     for (long i = 0; i < n; i++) { ms += mix[i] * mix[i]; as += a[i] * a[i]; }
     double g = sqrt(ms / n) / (sqrt(as / n) + 1e-9) * level;
     for (long i = 0; i < n; i++) mix[i] += a[i] * g;
-    free(a); free(env);
+    free(a); free(env); free(drips);
 }
 
 // ---- songs ------------------------------------------------------------------------------
@@ -309,6 +332,8 @@ static void render_song(const char* in, const char* out) {
 // ---- firework sounds (13379 Hz) ---------------------------------------------------------
 static double* sbuf;
 static long sn;
+static double frand0(void) { return noise() * 0.5 + 0.5; }
+static double t_fade(long i) { double r = (sn - i) / (0.05 * R); return r < 1 ? r : 1; }
 
 static void sfx_begin(double secs) { sn = (long)(secs * R); sbuf = calloc(sn, sizeof(double)); }
 
@@ -383,39 +408,66 @@ static void launch(const char* dir) {
     sfx_end(dir, "launch", 0.15, 0.8, 80);
 }
 
-// Crackling stars: soft little pops, thick at first and thinning out.
+// Crackling stars: a dense, dry crackle like popcorn or a log fire, each crack a tiny
+// burst of bright noise, thick at first and thinning out.
 static void crackle(const char* dir) {
     rs = 4242;
-    sfx_begin(1.8);
+    sfx_begin(1.0);
+    double hp = 0, prev = 0;
     for (long i = 0; i < sn; i++) {
         double t = i / R;
-        double rate = 70 * exp(-t / 0.5) + 4;
-        if ((noise() * 0.5 + 0.5) < rate / R) {
-            double a = 0.3 + 0.4 * (noise() * 0.5 + 0.5), fr = 900 + 900 * (noise() * 0.5 + 0.5);
-            for (int k = 0; k < (int)(0.012 * R) && i + k < sn; k++)
-                sbuf[i + k] += a * sin(2 * PI * fr * k / R) * exp(-k / (0.003 * R)) * exp(-t / 0.9);
+        double rate = 260 * exp(-t / 0.3) + 10;
+        if (frand0() < rate / R) {
+            double a = 0.2 + 0.8 * pow(frand0(), 2);       // mostly small, a few loud
+            int len = 8 + (int)(frand0() * 30);
+            for (int k = 0; k < len && i + k < sn; k++)
+                sbuf[i + k] += a * noise() * exp(-k / (len * 0.3));
         }
     }
-    sfx_end(dir, "crackle", 0.5, 1.2, 80);
+    for (long i = 0; i < sn; i++) {                       // bright: take the low end out
+        double x = sbuf[i];
+        hp = 0.85 * (hp + x - prev); prev = x;
+        sbuf[i] = hp * (t_fade(i));
+    }
+    sfx_end(dir, "crackle", 0.25, 0.9, 90);
 }
 
-// Shimmer: a soft wash of high, bell-like sparkles that swells and fades slowly, for
-// glitter, willows, and chrysanthemums.
+// Glitter: a soft sizzle, like a sparkler. Airy high noise that flickers in tiny
+// grains, swells in, and fades away. No pitch, so nothing rings.
 static void glitter(const char* dir) {
     rs = 99;
-    sfx_begin(2.2);
+    sfx_begin(2.0);
+    double hp = 0, prev = 0, lp = 0, g = 0;
+    int grain = 0;
     for (long i = 0; i < sn; i++) {
         double t = i / R;
-        double rate = 45 * (t < 0.3 ? t / 0.3 : exp(-(t - 0.3) / 0.7)) + 1;
-        if ((noise() * 0.5 + 0.5) < rate / R) {
-            double fr = 1800 + 2600 * (noise() * 0.5 + 0.5), a = 0.15 + 0.2 * (noise() * 0.5 + 0.5);
-            for (int k = 0; k < (int)(0.18 * R) && i + k < sn; k++) {
-                double kt = k / R;
-                sbuf[i + k] += a * sin(2 * PI * fr * kt) * exp(-kt / 0.05) * (kt < 0.004 ? kt / 0.004 : 1);
-            }
+        if (--grain <= 0) { grain = 20 + (int)(frand0() * 80); g = pow(frand0(), 3); }
+        double nz = noise();
+        lp += (nz - lp) * 0.6;                            // soften the very top
+        double x = lp - prev; prev = lp;
+        hp = 0.9 * (hp + x);
+        double env = (t < 0.25 ? t / 0.25 : exp(-(t - 0.25) / 0.6));
+        sbuf[i] = hp * g * env;
+    }
+    sfx_end(dir, "glitter", 0.3, 0.8, 70);
+}
+
+// A crossette's stars splitting: a quick scatter of small pops.
+static void split(const char* dir) {
+    rs = 77;
+    sfx_begin(0.45);
+    for (int p = 0; p < 7; p++) {
+        long at = (long)(frand0() * 0.13 * R);
+        double a = 0.5 + 0.5 * frand0(), f0 = 220 + 160 * frand0(), ph = 0;
+        for (long k = 0; at + k < sn && k < (long)(0.08 * R); k++) {
+            double t = k / R;
+            double f = f0 * 0.45 + f0 * 0.55 * exp(-t / 0.006);
+            ph += 2 * PI * f / R;
+            double snap = noise() * exp(-t / 0.004);
+            sbuf[at + k] += a * (sin(ph) * exp(-t / 0.018) + 0.6 * snap) * (t < 0.001 ? t / 0.001 : 1);
         }
     }
-    sfx_end(dir, "glitter", 0.7, 1.3, 75);
+    sfx_end(dir, "split", 0.3, 0.9, 105);
 }
 
 // A bubble popping into view at review time.
@@ -492,6 +544,7 @@ int main(int argc, char** argv) {
         boom(d, "boom_l", 2.5, 1.4, 1.0, 13);
         crackle(d);
         glitter(d);
+        split(d);
         pop(d);
         chime(d);
         splash(d);
