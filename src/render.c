@@ -13,21 +13,23 @@ u16 grad[160];
 
 // ---- sound -------------------------------------------------------------------------
 // Sound effects: up to NVOICE samples mixed in software into DirectSound A at 13379 Hz,
-// exactly 224 samples a frame. Music: a pre-rendered song streamed straight to
-// DirectSound B at 18157 Hz, 304 samples a frame. At each VBlank both DMAs restart on the
-// next frame's samples (with the FIFOs reset), then the mixer fills the buffer after it.
-// After the reset, the CPU puts the first 16 samples into each FIFO itself and the DMA
-// carries on from there. Left empty, the FIFO plays one stray sample before the DMA
-// catches up: a click every frame (a faint buzz) on stricter emulators and hardware.
+// 224 samples a frame, written two frames ahead into a ring of RING frames. Music: a
+// pre-rendered song streamed straight from the ROM to DirectSound B at 18157 Hz.
+//
+// Both DMAs run straight on; a stream restarts only when it wraps (the ring's end, a
+// song's loop) or the song changes. (v0.11.0 restarted both every frame. VBA-M, the core
+// in Delta, keeps looser time, so each restart could drop or repeat a sample: static.)
+// A restart empties the FIFO, the CPU puts the first 16 samples in itself, and the DMA
+// carries on from there, so the FIFO never plays a stray sample while it refills.
 Voice voices[NVOICE];
 const s8* mus_data;
 u32 mus_pos, mus_len;
-static s8 sfx_buf[2][224] __attribute__((aligned(4)));
+u8 mus_restart;                 // 1: start at mus_pos; 2: carry on at the next frame's spot
 static s16 acc[224];
-static s8 silence[352] __attribute__((aligned(4)));
-static int sfx_cur;
+static int ring_slot = RING - 1;
 
-#define SNDH_BASE ((1 << 2) | (1 << 8) | (1 << 9) | (1 << 12) | (1 << 13) | (1 << 14))
+// Music at 100%: VBA-M makes 50% by dropping the low bit, which doubles the hiss.
+#define SNDH_BASE ((1 << 2) | (1 << 3) | (1 << 8) | (1 << 9) | (1 << 12) | (1 << 13) | (1 << 14))
 
 IWRAM_CODE static void mix(s8* out) {
     for (int i = 0; i < 224; i++) acc[i] = 0;
@@ -45,34 +47,38 @@ IWRAM_CODE static void mix(s8* out) {
         vo->pos = pos;
     }
     for (int i = 0; i < 224; i++) {
-        int x = (acc[i] * 3) >> 8;           // one sound at full volume peaks near 90
+        int x = acc[i] >> 6;                 // one sound at full volume peaks near 120
         out[i] = x > 127 ? 127 : x < -127 ? -127 : x;
     }
 }
 
+// Restarts FIFO A (b = 0) or B (b = 1) at p, or stops it (p = 0).
+IWRAM_CODE static void restart_fifo(int b, const u32* p) {
+    vu32* fifo = (vu32*)(b ? 0x040000A4 : 0x040000A0);
+    vu16* cnt = (vu16*)(b ? 0x040000D2 : 0x040000C6);
+    *cnt = 0;
+    *(vu16*)0x04000082 = SNDH_BASE | (b ? 1 << 15 : 1 << 11);
+    if (!p) return;
+    *fifo = p[0]; *fifo = p[1]; *fifo = p[2]; *fifo = p[3];
+    *(vu32*)(b ? 0x040000C8 : 0x040000BC) = (u32)(p + 4);
+    *(vu32*)(b ? 0x040000CC : 0x040000C0) = (u32)fifo;
+    *cnt = 0xB640;                           // on, sound FIFO timing, 32-bit, repeat
+}
+
 IWRAM_CODE static void sound_vblank(void) {
-    const u32* a = (const u32*)sfx_buf[sfx_cur];
-    const u32* m = (const u32*)silence;
-    if (mus_data) {
-        m = (const u32*)(mus_data + mus_pos);
+    if (++ring_slot == RING) { ring_slot = 0; restart_fifo(0, (const u32*)sfx_ring); }
+    if (mus_restart) {
+        if (mus_restart == 2) { mus_pos += 304; if (mus_pos + 304 > mus_len) mus_pos = 0; }
+        mus_restart = 0;
+        restart_fifo(1, mus_data ? (const u32*)(mus_data + mus_pos) : 0);
+    } else if (mus_data) {
         mus_pos += 304;
-        if (mus_pos + 304 > mus_len) mus_pos = 0;   // songs are a whole number of frames
+        if (mus_pos + 304 > mus_len) {       // songs are a whole number of frames
+            mus_pos = 0;
+            restart_fifo(1, (const u32*)mus_data);
+        }
     }
-    vu32* fa = (vu32*)0x040000A0;
-    vu32* fb = (vu32*)0x040000A4;
-    *(vu16*)0x040000C6 = 0;
-    *(vu16*)0x040000D2 = 0;
-    *(vu16*)0x04000082 = SNDH_BASE | (1 << 11) | (1 << 15);   // empty both FIFOs
-    *fa = a[0]; *fa = a[1]; *fa = a[2]; *fa = a[3];
-    *fb = m[0]; *fb = m[1]; *fb = m[2]; *fb = m[3];
-    *(vu32*)0x040000BC = (u32)(a + 4);
-    *(vu32*)0x040000C0 = 0x040000A0;
-    *(vu16*)0x040000C6 = 0xB640;           // on, sound FIFO timing, 32-bit, repeat
-    *(vu32*)0x040000C8 = (u32)(m + 4);
-    *(vu32*)0x040000CC = 0x040000A4;
-    *(vu16*)0x040000D2 = 0xB640;
-    sfx_cur ^= 1;
-    mix(sfx_buf[sfx_cur]);
+    mix(sfx_ring + ((ring_slot + 2) & (RING - 1)) * 224);
 }
 
 // Called by the BIOS on each interrupt (ARM mode). On HBlank, it sets the backdrop for

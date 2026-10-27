@@ -264,11 +264,11 @@ static int fw_vol(void) { return scene == SC_TITLE ? 16 : scene == SC_INTRO ? 26
 static void burst_sound(int pat, int size) {
     static const u8 booms[3] = { SFX_BOOM_S, SFX_BOOM_M, SFX_BOOM_L };
     int v = fw_vol(), late = 4 + (int)(rnd() % 6);
-    sfx_later(booms[size], v, 236 + (int)(rnd() % 40), late);
+    sfx_later(booms[size], v + v / 3, 236 + (int)(rnd() % 40), late);   // the pop leads
     if (pat == P_CRACKLE) sfx_later(SFX_CRACKLE, v * 3 / 4, 256, late + 24);
     // The sparkly ones shimmer as their stars drift and twinkle.
     if (pat == P_GLITTER || pat == P_WILLOW || pat == P_CHRYS)
-        sfx_later(SFX_GLITTER, pat == P_GLITTER ? v : v * 3 / 4, 240 + (int)(rnd() % 32), late + 10);
+        sfx_later(SFX_GLITTER, pat == P_GLITTER ? v / 2 : v * 2 / 5, 240 + (int)(rnd() % 32), late + 10);
 }
 
 // A rocket's hue byte: low 4 bits the color; high 4 bits the second color + 1 (0 = none).

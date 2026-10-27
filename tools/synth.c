@@ -360,7 +360,7 @@ static void boom(const char* dir, const char* name, double secs, double body, do
         lp += (nz - lp) * c;
         lp2 += (lp - lp2) * c;
         double puff = lp2 * 2.0 * exp(-t / (0.09 * body)) * att;
-        sbuf[i] = knock * 0.9 + snap + thump * 0.8 + puff;
+        sbuf[i] = knock * 1.2 + snap * 1.4 + thump * 0.7 + puff * 0.9;
     }
     sfx_end(dir, name, 0.35, 1.5, 116);
 }

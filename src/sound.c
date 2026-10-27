@@ -6,6 +6,7 @@ typedef struct { const s8* data; u32 len; } Clip;
 extern const Clip sfx_table[NUM_SFX], song_table[NUM_SONGS];
 
 static int cur_song = -1;
+s8 sfx_ring[RING * 224] __attribute__((aligned(4)));   // mixed sound effects (render.c)
 int music_off, sfx_off;           // dev menu switches, for tracking down sounds
 static u32 voice_age;
 
@@ -16,7 +17,7 @@ static Later later[8];
 void sound_init(void) {
     *(vu16*)0x04000084 = 0x80;             // sound on
     *(vu16*)0x04000080 = 0;                // the tone channels stay quiet
-    *(vu16*)0x04000082 = (1 << 2) | (1 << 8) | (1 << 9) | (1 << 12) | (1 << 13) | (1 << 14) | (1 << 11) | (1 << 15);
+    *(vu16*)0x04000082 = (1 << 2) | (1 << 3) | (1 << 8) | (1 << 9) | (1 << 12) | (1 << 13) | (1 << 14) | (1 << 11) | (1 << 15);
     *(vu16*)0x04000100 = 65536 - 1254;     // timer 0: 13379 Hz, effects
     *(vu16*)0x04000102 = 0x80;
     *(vu16*)0x04000104 = 65536 - 924;      // timer 1: 18157 Hz, music
@@ -82,8 +83,10 @@ void music(int song) {
     cur_song = song;
     REG_IME = 0;
     mus_data = 0;
+    mus_restart = 1;                 // the next VBlank starts (or stops) the stream
     if (song >= 0 && !music_off) {
-        if (!same) mus_pos = 0;
+        if (same) mus_restart = 2;
+        else mus_pos = 0;
         mus_len = song_table[song].len;
         mus_data = song_table[song].data;
     }

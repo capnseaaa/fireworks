@@ -61,6 +61,9 @@ typedef struct { const s8* data; u32 pos, end, step; int vol; u32 age; } Voice;
 extern Voice voices[NVOICE];
 extern const s8* mus_data;          // the song streaming to DirectSound B, or 0
 extern u32 mus_pos, mus_len;
+extern u8 mus_restart;
+#define RING 16                     // frames in the sound effects ring (a power of 2)
+extern s8 sfx_ring[RING * 224];
 
 // Moves every particle one frame and draws it into a mode 4 page. Lives in IWRAM.
 __attribute__((long_call)) void step_draw(u8* page);
