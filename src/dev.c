@@ -5,11 +5,11 @@
 static int dev_from, dev_cursor, dev_note_t;
 static const char* dev_note;
 
-enum { D_COINS, D_MATS, D_PATTERNS, D_ALL, D_REP, D_DAY, D_NIGHT, D_LATE, D_MINE9, D_TITLE, D_BACK, D_COUNT };
+enum { D_COINS, D_MATS, D_PATTERNS, D_ALL, D_REP, D_DAY, D_NIGHT, D_LATE, D_MINE9, D_MUSIC, D_SFX, D_TITLE, D_BACK, D_COUNT };
 static const char* const dev_items[D_COUNT] = {
     "+1000 COINS", "MAX MATERIALS", "ALL PATTERNS", "ALL UPGRADES + GEAR", "+10 REP",
     "GO TO A NEW DAY", "GO TO TONIGHT'S SHOP", "DAY CLOCK TO 5:50 PM", "MINE: REACHED FLOOR 9",
-    "BACK TO THE TITLE", "CLOSE",
+    "MUSIC: ON", "SOUND EFFECTS: ON", "BACK TO THE TITLE", "CLOSE",
 };
 
 // Called from the main loop: L+R held, B pressed.
@@ -69,6 +69,8 @@ void dev_update(u8* back) {
             done("ONLY WORKS FROM THE DAY.");
             break;
         case D_MINE9: mine_deepest = 9; done("THE MINE REMEMBERS FLOOR 9."); break;
+        case D_MUSIC: music_toggle(); done(music_off ? "MUSIC OFF." : "MUSIC ON."); break;
+        case D_SFX: sfx_off ^= 1; if (sfx_off) sfx_stop_all(); done(sfx_off ? "SOUND EFFECTS OFF." : "SOUND EFFECTS ON."); break;
         case D_TITLE: set_scene(SC_TITLE); return;
         case D_BACK: go_back(); return;
         }
@@ -85,8 +87,11 @@ void dev_update(u8* back) {
     cat_num(p, rep);
     text(back, 8, 14, buf, UI_GRAY);
     for (int i = 0; i < D_COUNT; i++) {
-        text(back, 22, 28 + i * 10, dev_items[i], i == dev_cursor ? UI_YELLOW : UI_WHITE);
-        if (i == dev_cursor) text(back, 12, 28 + i * 10, ">", UI_YELLOW);
+        const char* s = dev_items[i];
+        if (i == D_MUSIC && music_off) s = "MUSIC: OFF";
+        if (i == D_SFX && sfx_off) s = "SOUND EFFECTS: OFF";
+        text(back, 22, 27 + i * 9, s, i == dev_cursor ? UI_YELLOW : UI_WHITE);
+        if (i == dev_cursor) text(back, 12, 27 + i * 9, ">", UI_YELLOW);
     }
     text(back, 8, 150, dev_note_t ? dev_note : "A: DO IT   B: CLOSE", dev_note_t ? UI_GREEN : UI_GRAY);
 }

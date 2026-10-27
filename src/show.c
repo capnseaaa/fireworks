@@ -258,7 +258,7 @@ static void sphere(int x, int y, int n, int speed, int kind, int hue, int life, 
 }
 
 // Fireworks are quieter behind the title menu.
-static int fw_vol(void) { return scene == SC_TITLE ? 14 : scene == SC_INTRO ? 22 : 40; }
+static int fw_vol(void) { return scene == SC_TITLE ? 16 : scene == SC_INTRO ? 26 : 48; }
 
 // The sound of a burst: light travels faster, so the boom comes a few frames late.
 static void burst_sound(int pat, int size) {

@@ -16,6 +16,9 @@ u16 grad[160];
 // exactly 224 samples a frame. Music: a pre-rendered song streamed straight to
 // DirectSound B at 18157 Hz, 304 samples a frame. At each VBlank both DMAs restart on the
 // next frame's samples (with the FIFOs reset), then the mixer fills the buffer after it.
+// After the reset, the CPU puts the first 16 samples into each FIFO itself and the DMA
+// carries on from there. Left empty, the FIFO plays one stray sample before the DMA
+// catches up: a click every frame (a faint buzz) on stricter emulators and hardware.
 Voice voices[NVOICE];
 const s8* mus_data;
 u32 mus_pos, mus_len;
@@ -48,19 +51,24 @@ IWRAM_CODE static void mix(s8* out) {
 }
 
 IWRAM_CODE static void sound_vblank(void) {
-    *(vu16*)0x040000C6 = 0;
-    *(vu16*)0x040000D2 = 0;
-    *(vu16*)0x04000082 = SNDH_BASE | (1 << 11) | (1 << 15);   // empty both FIFOs
-    *(vu32*)0x040000BC = (u32)sfx_buf[sfx_cur];
-    *(vu32*)0x040000C0 = 0x040000A0;
-    *(vu16*)0x040000C6 = 0xB640;           // on, sound FIFO timing, 32-bit, repeat
-    const s8* m = silence;
+    const u32* a = (const u32*)sfx_buf[sfx_cur];
+    const u32* m = (const u32*)silence;
     if (mus_data) {
-        m = mus_data + mus_pos;
+        m = (const u32*)(mus_data + mus_pos);
         mus_pos += 304;
         if (mus_pos + 304 > mus_len) mus_pos = 0;   // songs are a whole number of frames
     }
-    *(vu32*)0x040000C8 = (u32)m;
+    vu32* fa = (vu32*)0x040000A0;
+    vu32* fb = (vu32*)0x040000A4;
+    *(vu16*)0x040000C6 = 0;
+    *(vu16*)0x040000D2 = 0;
+    *(vu16*)0x04000082 = SNDH_BASE | (1 << 11) | (1 << 15);   // empty both FIFOs
+    *fa = a[0]; *fa = a[1]; *fa = a[2]; *fa = a[3];
+    *fb = m[0]; *fb = m[1]; *fb = m[2]; *fb = m[3];
+    *(vu32*)0x040000BC = (u32)(a + 4);
+    *(vu32*)0x040000C0 = 0x040000A0;
+    *(vu16*)0x040000C6 = 0xB640;           // on, sound FIFO timing, 32-bit, repeat
+    *(vu32*)0x040000C8 = (u32)(m + 4);
     *(vu32*)0x040000CC = 0x040000A4;
     *(vu16*)0x040000D2 = 0xB640;
     sfx_cur ^= 1;

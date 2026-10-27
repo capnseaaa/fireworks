@@ -44,7 +44,11 @@ static void scene_music(int s) {
     case SC_SHOP: music(SONG_SHOP); break;
     case SC_REVIEW: music(SONG_REVIEW); break;
     case SC_DAY: music(SONG_DAY); break;
-    case SC_FIELD: music(field_area == FIELD_MINE || field_area == FIELD_GEODES ? SONG_MINE : SONG_DAY); break;
+    case SC_FIELD:                  // the day's song, with the sounds of the place over it
+        music(field_area == FIELD_MINE || field_area == FIELD_GEODES ? SONG_MINE
+              : field_area == FIELD_FOREST ? SONG_FOREST
+              : field_area == FIELD_BEACH ? SONG_BEACH : SONG_QUARRY);
+        break;
     }
 }
 

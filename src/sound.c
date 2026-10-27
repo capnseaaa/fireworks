@@ -6,6 +6,7 @@ typedef struct { const s8* data; u32 len; } Clip;
 extern const Clip sfx_table[NUM_SFX], song_table[NUM_SONGS];
 
 static int cur_song = -1;
+int music_off, sfx_off;           // dev menu switches, for tracking down sounds
 static u32 voice_age;
 
 // A sound for later: a burst is seen before it is heard.
@@ -24,7 +25,7 @@ void sound_init(void) {
 
 // vol 0..64; pitch 256 = as recorded (higher is higher and shorter).
 void sfx_ex(int id, int vol, int pitch) {
-    if (id < 0 || id >= NUM_SFX || vol <= 0) return;
+    if (id < 0 || id >= NUM_SFX || vol <= 0 || sfx_off) return;
     // A free voice, or else the oldest one.
     int best = 0;
     for (int v = 0; v < NVOICE; v++) {
@@ -64,14 +65,25 @@ void sfx_stop_all(void) {
     for (int i = 0; i < 8; i++) later[i].wait = 0;
 }
 
-// Starts a song from the top, unless it is already playing. -1 = silence.
+// Turns the music on or off (the dev menu). On again, the song starts over.
+void music_toggle(void) {
+    int s = cur_song;
+    music_off ^= 1;
+    cur_song = -1;
+    music(s);
+}
+
+// Starts a song from the top, unless it is already playing. -1 = silence. The day's
+// versions (town, forest, beach, quarry) are one song with different sounds of the
+// place over it, all the same length, so walking between them carries on mid-tune.
 void music(int song) {
     if (song == cur_song) return;
+    int same = cur_song >= 0 && song >= 0 && mus_data && song_table[song].len == mus_len;
     cur_song = song;
     REG_IME = 0;
     mus_data = 0;
-    if (song >= 0) {
-        mus_pos = 0;
+    if (song >= 0 && !music_off) {
+        if (!same) mus_pos = 0;
         mus_len = song_table[song].len;
         mus_data = song_table[song].data;
     }

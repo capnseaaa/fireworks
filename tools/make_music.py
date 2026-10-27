@@ -12,6 +12,8 @@ OUT = os.path.join(ROOT, "build", "audio")
 RATE = 18157
 FRAME = 304
 I_KEYS, I_BELL, I_HARP, I_PAD, I_BASS, I_FLUTE, I_SHAKER, I_KICK, I_MARIMBA = range(9)
+# Sounds of the place, layered over a song by synth.c (they loop with it).
+AMB_NONE, AMB_TOWN, AMB_FOREST, AMB_BEACH, AMB_QUARRY, AMB_MINE = range(6)
 
 NOTE_INDEX = {"C": 0, "C#": 1, "Db": 1, "D": 2, "D#": 3, "Eb": 3, "E": 4, "F": 5, "F#": 6, "Gb": 6,
               "G": 7, "G#": 8, "Ab": 8, "A": 9, "A#": 10, "Bb": 10, "B": 11}
@@ -50,8 +52,8 @@ def chord(sym, octave):
 
 
 class Song:
-    def __init__(self, name, bpm, bar, prog, loop=True, wet=0.3, room=1.0, gain=1.0, tail=0):
-        self.name, self.bpm, self.bar, self.loop = name, bpm, bar, loop
+    def __init__(self, name, bpm, bar, prog, loop=True, wet=0.3, room=1.0, gain=1.0, tail=0, amb=0):
+        self.name, self.bpm, self.bar, self.loop, self.amb = name, bpm, bar, loop, amb
         self.prog = prog.split()
         self.steps = len(self.prog) * bar + tail
         self.wet, self.room, self.gain = wet, room, gain
@@ -111,7 +113,7 @@ class Song:
         if not self.loop:
             total += 3 * FRAME * 60          # three seconds to ring out
         per_step = round(self.steps * step_s * RATE / FRAME) * FRAME / self.steps
-        lines = [f"{RATE} {total} {1 if self.loop else 0} {self.wet} {self.room} {self.gain}"]
+        lines = [f"{RATE} {total} {1 if self.loop else 0} {self.wet} {self.room} {self.gain} {self.amb}"]
         for inst, t, n, m, vel in sorted(self.notes, key=lambda x: x[1]):
             lines.append(f"{inst} {round(t * per_step)} {n * step_s:.4f} {freq(m):.3f} {vel:.3f}")
         with open(os.path.join(OUT, self.name + ".ev"), "w") as f:
@@ -132,22 +134,23 @@ def title():
     return s
 
 
-def day():
-    # Market morning in G: the same warm band, a bit livelier.
-    s = Song("day", 96, 8, "Gmaj7 D7 Em7 Cmaj7 Gmaj7 D7 Cmaj7 D7 Em7 Cmaj7 Gmaj7 D7 Cmaj7 D7 Gmaj7 Gmaj7",
-             wet=0.28, room=0.9)
-    s.line(I_FLUTE, "B4 2 D5 2 G5 3 F#5 1  A5 4 F#5 2 D5 2  E5 2 G5 2 B5 3 A5 1  G5 6 r 2 "
-                    "B5 2 A5 2 G5 2 D5 2  F#5 2 E5 2 D5 2 A4 2  C5 2 E5 2 G5 2 E5 2  F#5 6 r 2 "
-                    "G5 3 F#5 1 E5 2 B4 2  C5 2 E5 2 G5 4  D5 3 E5 1 D5 2 B4 2  A4 4 D5 4 "
-                    "E5 2 G5 2 C6 3 B5 1  A5 3 G5 1 F#5 2 A5 2  G5 8  r 8", 0.25)
-    s.comp(I_KEYS, 3, [(0, 2), (2, 2), (4, 2), (6, 1)], 0.1)
-    s.bass([(0, 3, 0), (4, 2, 1), (6, 2, 2)], 0.28)
+def day(name="day", amb=AMB_TOWN):
+    # Out in the sunshine, in A: the shop's band, brighter and bouncier.
+    s = Song(name, 108, 8, "Amaj7 F#m7 Bm7 E7 Amaj7 F#m7 D E7 C#m7 F#m7 Bm7 E7 Dmaj7 E7 A A",
+             wet=0.26, room=0.9, amb=amb)
+    s.line(I_FLUTE, "C#5 2 E5 2 A5 2 G#5 1 A5 1  F#5 4 E5 2 C#5 2  D5 2 F#5 2 B5 3 A5 1  G#5 4 E5 4 "
+                    "A5 2 C#6 2 B5 2 A5 2  F#5 2 A5 2 C#6 4  B5 2 A5 2 F#5 2 D5 2  E5 6 r 2 "
+                    "E5 2 G#5 2 B5 2 G#5 2  A5 3 G#5 1 F#5 2 C#5 2  D5 2 F#5 2 A5 2 F#5 2  G#5 4 B5 4 "
+                    "A5 2 F#5 2 C#6 3 B5 1  B5 3 A5 1 G#5 2 B5 2  A5 8  r 8", 0.25)
+    s.comp(I_KEYS, 3, [(0, 2), (3, 1), (4, 2), (6, 1)], 0.1)
+    s.bass([(0, 2, 0), (2, 2, 2), (4, 2, 1), (6, 2, 2)], 0.27)
+    s.drums(I_SHAKER, [1, 3, 5, 7], 0.05)
     return s
 
 
-def mine():
+def mine(name="mine", amb=AMB_MINE):
     # Down in the mine, in A minor: slower and lower, still warm (no music box).
-    s = Song("mine", 72, 8, "Am7 Fmaj7 Cmaj7 G Am7 Fmaj7 Dm7 E7 Am7 Fmaj7 Dm7 E7", wet=0.38, room=1.3)
+    s = Song(name, 72, 8, "Am7 Fmaj7 Cmaj7 G Am7 Fmaj7 Dm7 E7 Am7 Fmaj7 Dm7 E7", wet=0.38, room=1.3, amb=amb)
     s.line(I_FLUTE, "E5 4 C5 2 A4 2  A4 6 r 2  G4 2 C5 2 E5 2 G5 2  D5 6 r 2 "
                     "E5 3 D5 1 C5 2 A4 2  C5 4 A4 4  F5 3 E5 1 D5 2 A4 2  B4 6 r 2 "
                     "C5 2 E5 2 A5 4  G5 3 F5 1 E5 2 C5 2  D5 4 F5 2 E5 2  E5 6 r 2", 0.22)
@@ -188,7 +191,8 @@ def review():
     return s
 
 
-SONGS = [title, day, mine, shop, show, review]
+SONGS = [title, day, lambda: day("forest", AMB_FOREST), lambda: day("beach", AMB_BEACH),
+         lambda: day("quarry", AMB_QUARRY), mine, shop, show, review]
 
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)

@@ -164,13 +164,119 @@ static void write_raw(const char* path, const double* buf, long n, double peak) 
     fclose(f);
 }
 
+// ---- sounds of the place, layered over a song -------------------------------------------
+// Each one loops with the song: events wrap around the end, and filtered noise runs over
+// the loop twice so its state carries across the seam.
+enum { AMB_NONE, AMB_TOWN, AMB_FOREST, AMB_BEACH, AMB_QUARRY, AMB_MINE };
+
+static double frand(void) { return noise() * 0.5 + 0.5; }
+
+static void put(double* b, long n, long j, double v) { b[((j % n) + n) % n] += v; }
+
+// A songbird: a few quick chirps that sweep down, sometimes a trill.
+static void bird(double* b, long n, long at, double amp) {
+    int chirps = 2 + (int)(frand() * 4);
+    double base = 2600 + 1600 * frand();
+    long t0 = at;
+    for (int c = 0; c < chirps; c++) {
+        double len = 0.05 + 0.06 * frand(), ph = 0;
+        for (long i = 0; i < (long)(len * R); i++) {
+            double t = i / R, u = t / len;
+            double f = base * (1.15 - 0.35 * u) + 300 * sin(2 * PI * 30 * t);
+            ph += 2 * PI * f / R;
+            put(b, n, t0 + i, amp * sin(ph) * sin(PI * u));
+        }
+        t0 += (long)((len + 0.03 + 0.06 * frand()) * R);
+    }
+}
+
+// A drip in the mine: a small falling plink.
+static void drip(double* b, long n, long at, double amp) {
+    double f = 1300 + 900 * frand(), ph = 0;
+    for (long i = 0; i < (long)(0.12 * R); i++) {
+        double t = i / R;
+        ph += 2 * PI * f * (1 + 0.6 * exp(-t / 0.01)) / R;
+        put(b, n, at + i, amp * sin(ph) * exp(-t / 0.03));
+    }
+}
+
+static void ambience(double* mix, long n, int kind, double level) {
+    if (kind == AMB_NONE) return;
+    double* a = calloc(n, sizeof(double));
+    double* env = calloc(n, sizeof(double));
+    rs = 2024 + kind;
+    double secs = n / R;
+    if (kind == AMB_BEACH) {
+        // Waves: a slow swell every 6-8 seconds that washes in and drains away.
+        double t = 0;
+        while (t < secs - 1) {
+            double rise = 2.0 + frand(), fall = 3.0 + frand() * 1.5, peak = 0.7 + 0.3 * frand();
+            for (long i = 0; i < (long)((rise + fall) * R); i++) {
+                double u = i / R;
+                double e = u < rise ? pow(u / rise, 2) : exp(-(u - rise) / (fall * 0.45));
+                env[((long)(t * R) + i) % n] += e * peak;
+            }
+            t += 6 + 2 * frand();
+        }
+    }
+    double lp = 0, lp2 = 0, hp = 0;
+    long bird_next = (long)(R * (1 + 3 * frand()));
+    for (int pass = 0; pass < 2; pass++)
+        for (long i = 0; i < n; i++) {
+            double nz = noise(), x = 0;
+            if (kind == AMB_BEACH) {             // surf: darker under the swell, brighter as it breaks
+                double e = env[i], c = (250 + 900 * e) / R * 2 * PI;
+                lp += (nz - lp) * c; lp2 += (lp - lp2) * c;
+                x = lp2 * (0.15 + e) * 3;
+            } else if (kind == AMB_QUARRY) {     // wind over the stone, rising and falling slowly
+                double c = 300 / R * 2 * PI;
+                lp += (nz - lp) * c; lp2 += (lp - lp2) * c;
+                double gust = 0.6 + 0.4 * sin(2 * PI * i / n * 5) * sin(2 * PI * i / n * 3 + 1);
+                x = lp2 * 4 * gust;
+            } else if (kind == AMB_MINE) {       // still cave air: a low, soft rumble
+                double c = 90 / R * 2 * PI;
+                lp += (nz - lp) * c; lp2 += (lp - lp2) * c;
+                x = lp2 * 6;
+            } else if (kind == AMB_FOREST) {     // leaves rustling now and then
+                double c = 1500 / R * 2 * PI;
+                lp += (nz - lp) * c;
+                double h = lp - hp; hp += (lp - hp) * 0.05;
+                double sway = pow(0.5 + 0.5 * sin(2 * PI * i / n * 7), 3);
+                x = h * 0.6 * sway;
+            }
+            if (pass) a[i] += x;
+        }
+    // Birds in town and the forest; drips in the mine; a gull now and then at the beach.
+    double every = kind == AMB_FOREST ? 2.5 : kind == AMB_TOWN ? 5.0 : kind == AMB_MINE ? 3.0 : kind == AMB_BEACH ? 14.0 : 0;
+    if (every > 0)
+        for (long at = bird_next; at < n; at += (long)(R * every * (0.5 + frand()))) {
+            if (kind == AMB_MINE) drip(a, n, at, 0.5);
+            else if (kind == AMB_BEACH) {        // a far-off gull: two falling cries
+                for (int c = 0; c < 2; c++) {
+                    double ph = 0, len = 0.35;
+                    for (long i = 0; i < (long)(len * R); i++) {
+                        double t = i / R, u = t / len, f = 1500 - 500 * u;
+                        ph += 2 * PI * f / R;
+                        put(a, n, at + (long)(c * 0.45 * R) + i, 0.25 * (sin(ph) + 0.4 * sin(2 * ph)) * sin(PI * u));
+                    }
+                }
+            } else bird(a, n, at, kind == AMB_FOREST ? 0.45 : 0.3);
+        }
+    // Scale against the song: the place sits under the tune, not over it.
+    double ms = 0, as = 0;
+    for (long i = 0; i < n; i++) { ms += mix[i] * mix[i]; as += a[i] * a[i]; }
+    double g = sqrt(ms / n) / (sqrt(as / n) + 1e-9) * level;
+    for (long i = 0; i < n; i++) mix[i] += a[i] * g;
+    free(a); free(env);
+}
+
 // ---- songs ------------------------------------------------------------------------------
-// in.ev: "rate total loop wet room gain", then one note per line: "inst start dur freq vel".
+// in.ev: "rate total loop wet room gain ambience", then one note per line: "inst start dur freq vel".
 static void render_song(const char* in, const char* out) {
     FILE* f = fopen(in, "r");
     if (!f) { perror(in); exit(1); }
-    long total; int loop; double wet, room, gain;
-    if (fscanf(f, "%lf %ld %d %lf %lf %lf", &R, &total, &loop, &wet, &room, &gain) != 6) exit(1);
+    long total; int loop, amb; double wet, room, gain;
+    if (fscanf(f, "%lf %ld %d %lf %lf %lf %d", &R, &total, &loop, &wet, &room, &gain, &amb) != 7) exit(1);
     double* dry = calloc(total, sizeof(double));
     int inst; long s0; double dur, fr, vel;
     while (fscanf(f, "%d %ld %lf %lf %lf", &inst, &s0, &dur, &fr, &vel) == 5)
@@ -189,6 +295,8 @@ static void render_song(const char* in, const char* out) {
     double l = 0;
     for (int pass = 0; pass < 2; pass++)
         for (long i = 0; i < total; i++) { l += (mix[i] - l) * 0.55; if (pass) mix[i] = l; }
+    static const double amb_level[6] = { 0, 0.22, 0.4, 0.55, 0.4, 0.4 };
+    ambience(mix, total, amb, amb_level[amb]);
     // Even the level out (a soft compressor), so quiet notes stay well above the 8-bit floor.
     double ss = 0;
     for (long i = 0; i < total; i++) ss += mix[i] * mix[i];
@@ -226,26 +334,35 @@ static void sfx_end(const char* dir, const char* name, double wet, double room, 
     free(sbuf);
 }
 
-// A burst: a deep, round pop that rings out long and low, with a soft puff of air
-// and the echo off the town. No sharp crack.
+// A burst: a crisp pop up front (a snap of air and a quick drop in pitch), then a deep,
+// round boom that rings out low, and the echo off the town.
 static void boom(const char* dir, const char* name, double secs, double body, double bright, unsigned seed) {
     rs = seed;
     sfx_begin(secs);
-    double ph = 0, lp = 0, lp2 = 0;
+    double ph = 0, ph2 = 0, lp = 0, lp2 = 0, bp = 0, bp2 = 0;
     for (long i = 0; i < sn; i++) {
         double t = i / R;
-        double fr = 38 + 70 * exp(-t / 0.035);           // drops fast into a low hum
-        double att = t < 0.004 ? t / 0.004 : 1;
-        double thump = sin(ph) * exp(-t / (0.32 * body)) * att;
-        ph += 2 * PI * fr / R;
+        double att = t < 0.002 ? t / 0.002 : 1;
+        // The pop: a fast knock that drops from 260 to 90 Hz in a few milliseconds...
+        double kf = 90 + 170 * exp(-t / 0.008);
+        double knock = sin(ph2) * exp(-t / 0.025) * att;
+        ph2 += 2 * PI * kf / R;
+        // ...with a short snap of band-passed noise on top.
         double nz = noise();
-        double c = (150 + bright * 500 * exp(-t / 0.04)) / R * 2 * PI;
+        double f0 = 2 * sin(PI * 1400 / R);
+        bp += f0 * bp2; bp2 += f0 * (nz - bp - 0.7 * bp2);   // a resonant filter around 1.4 kHz
+        double snap = bp2 * 0.9 * exp(-t / 0.012) * att * bright;
+        // The boom: a low hum that rings out, and a soft puff of air.
+        double fr = 38 + 60 * exp(-t / 0.04);
+        double thump = sin(ph) * exp(-t / (0.3 * body)) * (t < 0.006 ? t / 0.006 : 1);
+        ph += 2 * PI * fr / R;
+        double c = (150 + 500 * exp(-t / 0.04)) / R * 2 * PI;
         lp += (nz - lp) * c;
         lp2 += (lp - lp2) * c;
-        double puff = lp2 * 2.2 * exp(-t / (0.09 * body)) * att;
-        sbuf[i] = thump + puff;
+        double puff = lp2 * 2.0 * exp(-t / (0.09 * body)) * att;
+        sbuf[i] = knock * 0.9 + snap + thump * 0.8 + puff;
     }
-    sfx_end(dir, name, 0.35, 1.5, 110);
+    sfx_end(dir, name, 0.35, 1.5, 116);
 }
 
 // Going up: a soft whoosh of air that rises and fades, like a shell climbing.

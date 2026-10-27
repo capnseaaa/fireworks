@@ -38,7 +38,7 @@ IMPORTS = {
 SYNTH = ["launch", "boom_s", "boom_m", "boom_l", "crackle", "glitter", "pop", "chime", "splash", "crafted"]
 SFX = SYNTH + list(IMPORTS)
 # Rendered by synth.c from tools/make_music.py at 18157 Hz. They all loop.
-SONGS = ["title", "day", "mine", "shop", "show", "review"]
+SONGS = ["title", "day", "forest", "beach", "quarry", "mine", "shop", "show", "review"]
 
 
 def convert(name, src, max_len, gain):

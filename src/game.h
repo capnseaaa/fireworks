@@ -50,6 +50,8 @@ void sfx_ex(int id, int vol, int pitch);          // vol 0..64, pitch 256 = norm
 void sfx_later(int id, int vol, int pitch, int frames);
 void sfx_stop_all(void);
 void music(int song);             // keeps playing if it already is; -1 = silence
+void music_toggle(void);
+extern int music_off, sfx_off;
 
 // --- render.c (ARM, IWRAM) ---
 __attribute__((long_call)) void copy_page(u8* dst, const u8* src);
