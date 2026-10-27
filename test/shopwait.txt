@@ -1,0 +1,11 @@
+# Into the shop, then sit still for ten seconds (to record its music).
+40 0
+1 8
+1 0
+20 0
+1 8
+1 0
+30 0
+1 0 @$scene
+600 0 sw.ppm
+1 0 @$scene,$mus_pos,$cpu_ticks

@@ -258,15 +258,17 @@ static void sphere(int x, int y, int n, int speed, int kind, int hue, int life, 
 }
 
 // Fireworks are quieter behind the title menu.
-static int fw_vol(void) { return scene == SC_TITLE ? 22 : scene == SC_INTRO ? 34 : 60; }
+static int fw_vol(void) { return scene == SC_TITLE ? 14 : scene == SC_INTRO ? 22 : 40; }
 
 // The sound of a burst: light travels faster, so the boom comes a few frames late.
 static void burst_sound(int pat, int size) {
     static const u8 booms[3] = { SFX_BOOM_S, SFX_BOOM_M, SFX_BOOM_L };
     int v = fw_vol(), late = 4 + (int)(rnd() % 6);
     sfx_later(booms[size], v, 236 + (int)(rnd() % 40), late);
-    if (pat == P_CRACKLE) sfx_later(SFX_CRACKLE, v, 256, late + 24);
-    if (pat == P_GLITTER || pat == P_WILLOW) sfx_later(SFX_GLITTER, v * 3 / 4, 256, late + 14);
+    if (pat == P_CRACKLE) sfx_later(SFX_CRACKLE, v * 3 / 4, 256, late + 24);
+    // The sparkly ones shimmer as their stars drift and twinkle.
+    if (pat == P_GLITTER || pat == P_WILLOW || pat == P_CHRYS)
+        sfx_later(SFX_GLITTER, pat == P_GLITTER ? v : v * 3 / 4, 240 + (int)(rnd() % 32), late + 10);
 }
 
 // A rocket's hue byte: low 4 bits the color; high 4 bits the second color + 1 (0 = none).
@@ -345,7 +347,7 @@ static void launch_at(int x, int pat, int hue, int size, int apex) {
     int v0 = isqrt(2048 * h);                  // reaches the apex with gravity 4 (8.8)
     add(x << 6, 152 << 6, (int)(rnd() & 31) - 16, -v0, 255, hue, K_ROCKET);
     parts[nparts - 1].aux = pat | (size << 4);
-    sfx_ex(SFX_LAUNCH, fw_vol() * 3 / 4, 240 + (int)(rnd() % 40));
+    sfx_ex(SFX_LAUNCH, fw_vol() * 2 / 3, 236 + (int)(rnd() % 40));
 }
 
 static void launch(int x, int pat, int hue, int size) {

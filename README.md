@@ -4,7 +4,7 @@ A cozy firework-making game for the Game Boy Advance, played in emulators (built
 
 Planned loop: by day, gather materials around town and sometimes find new patterns. By night, customers ask for fireworks and you build them from a quick menu. At the end of the night, everything you made goes up in a show.
 
-## Current state: v0.11.0, sound and music, shorter days, Luke
+## Current state: v0.11.1, softer sound, shorter days, Luke
 - **Title:** CONTINUE, NEW GAME, or FREE PLAY (the v0.1 sandbox; SELECT+START returns to the title).
 - **Intro:** Grandma hands her firework shop in a seaside town to her grandson, Luke (you). Nine short pages in her words, with the controls in brackets. START skips it.
 - **Saving:** the game saves itself at the start of every night and every day. CONTINUE picks up there. NEW GAME asks before replacing a save.
@@ -25,13 +25,13 @@ Planned loop: by day, gather materials around town and sometimes find new patter
 - **Reputation titles:** Newcomer, Local Favorite (10), Town Treasure (25), Legend (50). Each title means bigger orders and 10% more pay. A new title is announced at review time.
 - **Hidden likes:** a customer may secretly love a color, pattern, or size. Hit it (even by accident) and they love it: more coins and rep, plus a gift: colored stars, a tip, or a scroll that teaches a new pattern.
 - You start knowing peony, chrysanthemum, willow, and ring. Scrolls teach the rest; they turn up often in gifts, bottles, crates, the hollow stump, and the eagle's nest.
-- **Sound:** music for the title, the day, the mine, the shop, the show, and review time, plus sounds for fireworks (launch, booms that arrive a moment after the flash, crackle, glitter), menus, coins, chopping, mining, water, and the rating's stars.
+- **Sound:** music for the title, the day, the mine, the shop, the show, and review time, all in the shop's warm style (electric piano, ocarina, bass), plus sounds for fireworks (a soft whoosh going up, a deep pop a moment after the flash, a shimmer for glitter, willows, and chrysanthemums, soft crackles), menus, coins, chopping, mining, water, and the rating's stars.
 
 ## Dev mode
 Hold L+R and press B (almost anywhere) for a test menu: +1000 coins, max materials, all patterns, all upgrades and gear, +10 rep, jump to a new day or tonight's shop, set the day clock to 5:50 PM, mark mine floor 9 as reached, or go back to the title.
 
 ## How it sounds
-- Music is rendered at build time by `tools/synth.c` (a small synthesizer: electric piano, music box, harp, pad, bass, ocarina, marimba, soft drums, reverb) from notes in `tools/make_music.py`, then streamed to DirectSound B at 18157 Hz. Loops are seamless: the reverb tail wraps into the start.
+- Music is rendered at build time by `tools/synth.c` (a small synthesizer: electric piano, ocarina, bass, reverb, and a soft compressor so quiet notes stay above the 8-bit hiss) from notes in `tools/make_music.py`, then streamed to DirectSound B at 18157 Hz. Loops are seamless: the reverb tail wraps into the start.
 - Sound effects play on DirectSound A at 13379 Hz through a 6-voice mixer that runs in the VBlank interrupt (`src/render.c`). Firework sounds are synthesized by `tools/synth.c`; menu, coin, and tool sounds are CC0 recordings in `sfx/` (credits in `sfx/CREDITS.md`).
 
 ## How it draws

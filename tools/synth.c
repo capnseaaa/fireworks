@@ -155,7 +155,7 @@ static void write_raw(const char* path, const double* buf, long n, double peak) 
     FILE* f = fopen(path, "wb");
     if (!f) { perror(path); exit(1); }
     for (long i = 0; i < n; i++) {
-        double v = buf[i] / m * peak + (noise() + noise()) * 0.5;
+        double v = buf[i] / m * peak;          // no dither: at 8 bits it is a hiss
         long q = lround(v);
         if (q > 127) q = 127;
         if (q < -127) q = -127;
@@ -189,6 +189,11 @@ static void render_song(const char* in, const char* out) {
     double l = 0;
     for (int pass = 0; pass < 2; pass++)
         for (long i = 0; i < total; i++) { l += (mix[i] - l) * 0.55; if (pass) mix[i] = l; }
+    // Even the level out (a soft compressor), so quiet notes stay well above the 8-bit floor.
+    double ss = 0;
+    for (long i = 0; i < total; i++) ss += mix[i] * mix[i];
+    double rms = sqrt(ss / total) + 1e-9;
+    for (long i = 0; i < total; i++) mix[i] = tanh(mix[i] / rms * 0.28 * 1.6);
     write_raw(out, mix, total, 124 * gain);
     free(dry); free(wetb); free(mix);
 }
@@ -221,78 +226,79 @@ static void sfx_end(const char* dir, const char* name, double wet, double room, 
     free(sbuf);
 }
 
-// A soft boom: a low thump, a burst of rumbling noise that darkens as it fades, and the
-// echo off the town (the reverb).
+// A burst: a deep, round pop that rings out long and low, with a soft puff of air
+// and the echo off the town. No sharp crack.
 static void boom(const char* dir, const char* name, double secs, double body, double bright, unsigned seed) {
     rs = seed;
     sfx_begin(secs);
-    double ph = 0, lp = 0, lp2 = 0, lpr = 0;
+    double ph = 0, lp = 0, lp2 = 0;
     for (long i = 0; i < sn; i++) {
         double t = i / R;
-        double fr = 32 + 60 * exp(-t / 0.05);
-        double th = sin(ph) * exp(-t / (0.12 * body));
+        double fr = 38 + 70 * exp(-t / 0.035);           // drops fast into a low hum
+        double att = t < 0.004 ? t / 0.004 : 1;
+        double thump = sin(ph) * exp(-t / (0.32 * body)) * att;
         ph += 2 * PI * fr / R;
-        double cut = (200 + bright * 2400 * exp(-t / 0.06)) / R;
         double nz = noise();
-        lp += (nz - lp) * cut * 2 * PI;
-        lp2 += (lp - lp2) * cut * 2 * PI;
-        double crack = lp2 * 3.0 * exp(-t / (0.18 * body)) * (t < 0.003 ? t / 0.003 : 1);
-        lpr += (nz - lpr) * (120 / R) * 2 * PI;
-        double rumble = lpr * 9.0 * exp(-t / (0.5 * body)) * (t < 0.03 ? t / 0.03 : 1);
-        sbuf[i] = th * 0.9 + crack + rumble;
+        double c = (150 + bright * 500 * exp(-t / 0.04)) / R * 2 * PI;
+        lp += (nz - lp) * c;
+        lp2 += (lp - lp2) * c;
+        double puff = lp2 * 2.2 * exp(-t / (0.09 * body)) * att;
+        sbuf[i] = thump + puff;
     }
-    sfx_end(dir, name, 0.45, 1.6, 120);
+    sfx_end(dir, name, 0.35, 1.5, 110);
 }
 
-// The lift charge: a muffled "thoomp", then a fading hiss as the shell climbs.
+// Going up: a soft whoosh of air that rises and fades, like a shell climbing.
 static void launch(const char* dir) {
     rs = 777;
-    sfx_begin(0.7);
-    double ph = 0, lp = 0, hp = 0;
+    sfx_begin(1.0);
+    double lp = 0, lp2 = 0, hp = 0;
     for (long i = 0; i < sn; i++) {
         double t = i / R;
-        double fr = 55 + 110 * exp(-t / 0.03);
-        double th = sin(ph) * exp(-t / 0.06);
-        ph += 2 * PI * fr / R;
+        double c = (300 + 1800 * (t / 1.0)) / R * 2 * PI;   // the band climbs
         double nz = noise();
-        lp += (nz - lp) * 0.35;
-        double h = lp - hp; hp += (lp - hp) * 0.08;
-        double hiss = h * 0.35 * (t < 0.05 ? t / 0.05 : exp(-(t - 0.05) / 0.22));
-        sbuf[i] = th + hiss;
+        lp += (nz - lp) * c;
+        lp2 += (lp - lp2) * c;
+        double b = lp2 - hp; hp += (lp2 - hp) * (150 / R * 2 * PI);
+        double env = t < 0.25 ? t / 0.25 : exp(-(t - 0.25) / 0.25);
+        sbuf[i] = b * env * 3;
     }
-    sfx_end(dir, "launch", 0.2, 1.0, 100);
+    sfx_end(dir, "launch", 0.15, 0.8, 80);
 }
 
-// Crackling stars: sharp little pops, thick at first and thinning out.
+// Crackling stars: soft little pops, thick at first and thinning out.
 static void crackle(const char* dir) {
     rs = 4242;
     sfx_begin(1.8);
     for (long i = 0; i < sn; i++) {
         double t = i / R;
-        double rate = 160 * exp(-t / 0.5) + 6;
+        double rate = 70 * exp(-t / 0.5) + 4;
         if ((noise() * 0.5 + 0.5) < rate / R) {
-            double a = 0.4 + 0.6 * (noise() * 0.5 + 0.5);
-            for (int k = 0; k < 24 && i + k < sn; k++)
-                sbuf[i + k] += a * (k & 1 ? -1 : 1) * exp(-k / 3.0) * exp(-t / 0.9);
+            double a = 0.3 + 0.4 * (noise() * 0.5 + 0.5), fr = 900 + 900 * (noise() * 0.5 + 0.5);
+            for (int k = 0; k < (int)(0.012 * R) && i + k < sn; k++)
+                sbuf[i + k] += a * sin(2 * PI * fr * k / R) * exp(-k / (0.003 * R)) * exp(-t / 0.9);
         }
     }
-    sfx_end(dir, "crackle", 0.5, 1.2, 105);
+    sfx_end(dir, "crackle", 0.5, 1.2, 80);
 }
 
-// Glitter: a shimmer of tiny high pings.
+// Shimmer: a soft wash of high, bell-like sparkles that swells and fades slowly, for
+// glitter, willows, and chrysanthemums.
 static void glitter(const char* dir) {
     rs = 99;
-    sfx_begin(1.6);
+    sfx_begin(2.2);
     for (long i = 0; i < sn; i++) {
         double t = i / R;
-        double rate = 70 * exp(-t / 0.6) + 2;
+        double rate = 45 * (t < 0.3 ? t / 0.3 : exp(-(t - 0.3) / 0.7)) + 1;
         if ((noise() * 0.5 + 0.5) < rate / R) {
-            double fr = 2600 + 3200 * (noise() * 0.5 + 0.5), a = 0.2 + 0.3 * (noise() * 0.5 + 0.5);
-            for (int k = 0; k < (int)(0.05 * R) && i + k < sn; k++)
-                sbuf[i + k] += a * sin(2 * PI * fr * k / R) * exp(-k / (0.012 * R)) * exp(-t / 0.8);
+            double fr = 1800 + 2600 * (noise() * 0.5 + 0.5), a = 0.15 + 0.2 * (noise() * 0.5 + 0.5);
+            for (int k = 0; k < (int)(0.18 * R) && i + k < sn; k++) {
+                double kt = k / R;
+                sbuf[i + k] += a * sin(2 * PI * fr * kt) * exp(-kt / 0.05) * (kt < 0.004 ? kt / 0.004 : 1);
+            }
         }
     }
-    sfx_end(dir, "glitter", 0.6, 1.0, 90);
+    sfx_end(dir, "glitter", 0.7, 1.3, 75);
 }
 
 // A bubble popping into view at review time.
@@ -364,9 +370,9 @@ int main(int argc, char** argv) {
         R = 13379;
         const char* d = argv[2];
         launch(d);
-        boom(d, "boom_s", 1.2, 0.7, 0.7, 11);
-        boom(d, "boom_m", 1.7, 1.0, 0.85, 12);
-        boom(d, "boom_l", 2.3, 1.4, 1.0, 13);
+        boom(d, "boom_s", 1.4, 0.7, 0.6, 11);
+        boom(d, "boom_m", 1.9, 1.0, 0.8, 12);
+        boom(d, "boom_l", 2.5, 1.4, 1.0, 13);
         crackle(d);
         glitter(d);
         pop(d);

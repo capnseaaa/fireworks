@@ -120,44 +120,39 @@ class Song:
 
 
 def title():
-    # A slow waltz in D: a music box over a harp, the shop sign swinging in the evening.
-    s = Song("title", 84, 6, "D A Bm F#m G D Em A D A Bm F#m G A D D", wet=0.35, room=1.2)
-    s.line(I_BELL, "A5 4 F#5 2  E5 3 F#5 1 E5 2  D5 4 F#5 2  C#5 6 "
-                   "B4 2 D5 2 G5 2  F#5 4 A5 2  G5 3 F#5 1 E5 2  E5 6 "
-                   "A5 4 F#5 2  E5 3 F#5 1 E5 2  D5 2 F#5 2 B5 2  A5 4 F#5 2 "
-                   "G5 3 A5 1 B5 2  A5 3 G5 1 E5 2  F#5 4 E5 2  D5 6", 0.42)
-    s.arp(I_HARP, 3, [0, 1, 2, 4, 2, 1], 0.2)
-    s.bass([(0, 6, 0)], 0.3)
-    s.pad(4, 0.07)
+    # The main theme, in D: the shop's warm piano and ocarina, a little slower and dreamier.
+    s = Song("title", 76, 8, "Dmaj7 Gmaj7 Dmaj7 Gmaj7 Bm7 Em7 Gmaj7 A7 Dmaj7 Gmaj7 F#m7 Bm7 Em7 A7 Dmaj7 Dmaj7",
+             wet=0.32, room=1.1)
+    s.line(I_FLUTE, "A5 4 F#5 2 E5 2  D5 6 r 2  A5 3 B5 1 A5 2 F#5 2  G5 6 r 2 "
+                    "F#5 3 D5 1 B4 4  E5 3 G5 1 B5 4  A5 3 G5 1 F#5 2 D5 2  E5 6 r 2 "
+                    "F#5 4 A5 2 C#6 2  B5 4 A5 2 G5 2  A5 3 F#5 1 E5 2 C#5 2  D5 6 r 2 "
+                    "G5 3 F#5 1 E5 2 B4 2  C#5 3 D5 1 E5 2 G5 2  F#5 8  r 8", 0.25)
+    s.comp(I_KEYS, 3, [(0, 3), (3, 1), (5, 3)], 0.11)
+    s.bass([(0, 4, 0), (4, 3, 1)], 0.28)
     return s
 
 
 def day():
-    # Market morning in G: bouncing marimba, an ocarina tune, a shaker on the off beats.
-    s = Song("day", 104, 8, "G D Em C G D C D Em C G D C D G G", wet=0.22, room=0.8)
+    # Market morning in G: the same warm band, a bit livelier.
+    s = Song("day", 96, 8, "Gmaj7 D7 Em7 Cmaj7 Gmaj7 D7 Cmaj7 D7 Em7 Cmaj7 Gmaj7 D7 Cmaj7 D7 Gmaj7 Gmaj7",
+             wet=0.28, room=0.9)
     s.line(I_FLUTE, "B4 2 D5 2 G5 3 F#5 1  A5 4 F#5 2 D5 2  E5 2 G5 2 B5 3 A5 1  G5 6 r 2 "
                     "B5 2 A5 2 G5 2 D5 2  F#5 2 E5 2 D5 2 A4 2  C5 2 E5 2 G5 2 E5 2  F#5 6 r 2 "
                     "G5 3 F#5 1 E5 2 B4 2  C5 2 E5 2 G5 4  D5 3 E5 1 D5 2 B4 2  A4 4 D5 4 "
-                    "E5 2 G5 2 C6 3 B5 1  A5 3 G5 1 F#5 2 A5 2  G5 8  r 8", 0.3)
-    s.arp(I_MARIMBA, 4, [0, 2, 1, 2, 0, 2, 1, 2], 0.18, length=1, accent=1.3)
-    s.bass([(0, 3, 0), (4, 2, 1), (6, 2, 2)], 0.32)
-    s.drums(I_SHAKER, [1, 3, 5, 7], 0.12)
-    s.drums(I_KICK, [0, 4], 0.4)
+                    "E5 2 G5 2 C6 3 B5 1  A5 3 G5 1 F#5 2 A5 2  G5 8  r 8", 0.25)
+    s.comp(I_KEYS, 3, [(0, 2), (2, 2), (4, 2), (6, 1)], 0.1)
+    s.bass([(0, 3, 0), (4, 2, 1), (6, 2, 2)], 0.28)
     return s
 
 
 def mine():
-    # Down in the mine, in A minor: low warm chords, slow bass, drips of a music box.
-    s = Song("mine", 70, 8, "Am F C G Am F Dm E Am F C G", wet=0.5, room=1.5)
-    s.comp(I_KEYS, 3, [(0, 7)], 0.16)
-    s.bass([(0, 8, 0)], 0.3)
-    s.pad(3, 0.05)
-    drips = [(0, "E6"), (5, "A5"), (11, "C6"), (19, "B5"), (22, "G5"), (30, "E6"), (37, "D6"), (44, "A5"),
-             (50, "F6"), (53, "E6"), (61, "B5"), (66, "C6"), (75, "E6"), (79, "A5"), (84, "G6"), (90, "E6")]
-    for t, n in drips:
-        s.add(I_BELL, t, 2, midi(n), 0.2)
-    s.line(I_MARIMBA, "r 32  A4 2 C5 2 E5 2 D5 2  C5 4 A4 4  r 8  E5 2 D5 2 B4 4 "
-                      "r 8  A4 2 C5 2 E5 2 G5 2  E5 8  r 8", 0.22)
+    # Down in the mine, in A minor: slower and lower, still warm (no music box).
+    s = Song("mine", 72, 8, "Am7 Fmaj7 Cmaj7 G Am7 Fmaj7 Dm7 E7 Am7 Fmaj7 Dm7 E7", wet=0.38, room=1.3)
+    s.line(I_FLUTE, "E5 4 C5 2 A4 2  A4 6 r 2  G4 2 C5 2 E5 2 G5 2  D5 6 r 2 "
+                    "E5 3 D5 1 C5 2 A4 2  C5 4 A4 4  F5 3 E5 1 D5 2 A4 2  B4 6 r 2 "
+                    "C5 2 E5 2 A5 4  G5 3 F5 1 E5 2 C5 2  D5 4 F5 2 E5 2  E5 6 r 2", 0.22)
+    s.comp(I_KEYS, 3, [(0, 4), (4, 3)], 0.1)
+    s.bass([(0, 6, 0), (6, 2, 1)], 0.28)
     return s
 
 
@@ -175,23 +170,21 @@ def shop():
 
 
 def show():
-    # Under the fireworks, in C: just a pad and a slow harp, quiet enough for the booms.
-    s = Song("show", 64, 8, "Cmaj7 Fmaj7 Am7 G Cmaj7 Fmaj7 Dm7 G", wet=0.5, room=1.5, gain=0.8)
-    s.pad(4, 0.1)
-    s.arp(I_HARP, 4, [0, None, 1, None, 2, None, 4, None], 0.14, length=2)
-    s.bass([(0, 8, 0)], 0.2)
-    s.line(I_BELL, "r 6 E6 2  r 6 C6 2  r 6 E6 2  r 4 D6 4  r 6 G6 2  r 6 A6 2  r 6 F6 2  r 4 D6 4", 0.12)
+    # Under the fireworks, in C: slow piano, long ocarina notes, quiet enough for the pops.
+    s = Song("show", 66, 8, "Cmaj7 Am7 Dm7 G7 Cmaj7 Am7 Fmaj7 G7", wet=0.38, room=1.3, gain=0.85)
+    s.line(I_FLUTE, "E5 8  r 4 C5 4  F5 6 r 2  D5 8  G5 6 r 2  E5 4 C5 4  A5 6 r 2  G5 8", 0.2)
+    s.comp(I_KEYS, 3, [(0, 4), (4, 4)], 0.1)
+    s.bass([(0, 8, 0)], 0.25)
     return s
 
 
 def review():
     # Review time, in D: warm and a little proud.
-    s = Song("review", 76, 8, "Dmaj7 Bm7 Gmaj7 A Dmaj7 F#m7 Gmaj7 A", wet=0.32, room=1.1)
-    s.line(I_BELL, "A5 4 F#5 4  D5 4 F#5 2 E5 2  D5 6 B4 2  C#5 8 "
-                   "A5 4 F#5 2 A5 2  C#6 4 A5 4  B5 3 A5 1 G5 2 F#5 2  E5 8", 0.36)
-    s.arp(I_KEYS, 4, [0, 1, 2, 1, 0, 1, 2, 4], 0.1, length=2)
-    s.bass([(0, 6, 0), (6, 2, 1)], 0.3)
-    s.pad(3, 0.05)
+    s = Song("review", 80, 8, "Dmaj7 Bm7 Gmaj7 A7 Dmaj7 F#m7 Gmaj7 A7", wet=0.3, room=1.0)
+    s.line(I_FLUTE, "A5 4 F#5 4  D5 4 F#5 2 E5 2  D5 6 B4 2  C#5 8 "
+                    "A5 4 F#5 2 A5 2  C#6 4 A5 4  B5 3 A5 1 G5 2 F#5 2  E5 8", 0.25)
+    s.comp(I_KEYS, 3, [(0, 3), (3, 1), (5, 3)], 0.11)
+    s.bass([(0, 4, 0), (4, 3, 1)], 0.28)
     return s
 
 
