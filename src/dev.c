@@ -69,8 +69,8 @@ void dev_update(u8* back) {
             done("ONLY WORKS FROM THE DAY.");
             break;
         case D_MINE9: mine_deepest = 9; done("THE MINE REMEMBERS FLOOR 9."); break;
-        case D_MUSIC: music_toggle(); done(music_off ? "MUSIC OFF." : "MUSIC ON."); break;
-        case D_SFX: sfx_off ^= 1; if (sfx_off) sfx_stop_all(); done(sfx_off ? "SOUND EFFECTS OFF." : "SOUND EFFECTS ON."); break;
+        case D_MUSIC: music_toggle(); settings_save(); done(music_off ? "MUSIC OFF." : "MUSIC ON."); break;
+        case D_SFX: sfx_off ^= 1; if (sfx_off) sfx_stop_all(); settings_save(); done(sfx_off ? "SOUND EFFECTS OFF." : "SOUND EFFECTS ON."); break;
         case D_TITLE: set_scene(SC_TITLE); return;
         case D_BACK: go_back(); return;
         }

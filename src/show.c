@@ -278,7 +278,9 @@ static void explode(const Burst* b) {
     int h2 = hue2 >= 0 ? hue2 : hue;               // where a pattern splits its stars
     int pat = b->aux & 15, size = b->aux >> 4;
     int S = 300 + size * 80;
-    int N = 60 + size * 45;
+    int N = (60 + size * 45) * (4 - lod) / 4;       // fewer stars while the sky is busy
+    int room = 680 - nparts;                         // and a sky already full of sparks
+    if (N > room) N = room > N / 4 ? room : N / 4;
     burst_sound(pat, size);
     u32 r = rnd();
     switch (pat) {
@@ -364,7 +366,17 @@ static void launch_random(void) {
 }
 
 // Moves and draws all particles into the back page, then turns rockets into bursts.
+// Keeps big shows at full speed: when the last frame ran long, trails thin out and new
+// bursts get fewer stars; detail comes back after a quiet half second.
+static void pick_detail(void) {
+    static int calm;
+    if (cpu_ticks > 4389 * 90 / 100) { if (lod < 2) lod++; calm = 0; }
+    else if (cpu_ticks < 4389 * 65 / 100 && lod > 0) { if (++calm > 30) { lod--; calm = 0; } }
+    else calm = 0;
+}
+
 static void sky_frame(u8* back) {
+    pick_detail();
     clear_page(back);
     step_draw(back);
     for (int i = 0; i < nbursts; i++) explode(&bursts[i]);
@@ -377,7 +389,7 @@ static void sky_frame(u8* back) {
 static int show_on, show_count, show_wait, hud_on = 1, msg_timer;
 static const char* msg;
 static int cur_pat, cur_hue = H_RED;
-static int title_cursor, title_wait, title_saved, title_confirm;
+static int title_cursor, title_wait, title_saved, title_confirm, title_opts;
 static int ns_idx, ns_wait, ns_end;
 static int ns_volley;                  // shells left in the current volley
 
@@ -408,6 +420,7 @@ void show_enter(void) {
     title_wait = 1;                                  // the title opens with a firework
     title_saved = has_save();
     title_confirm = 0;
+    title_opts = 0;
     title_cursor = title_saved ? 0 : 1;
     ns_idx = 0;
     ns_wait = 60;
@@ -429,12 +442,25 @@ void title_update(u8* back) {
         if ((rnd() & 3) == 0) launch_at(24 + rnd() % 192, rnd() % P_COUNT, rnd() % NCOLORS, 0, 14 + rnd() % 16);
         title_wait = 35 + rnd() % 45;
     }
-    static const char* const items[3] = { "CONTINUE", "NEW GAME", "FREE PLAY" };
-    int first = title_saved ? 0 : 1;   // no CONTINUE without a save
+    static const char* const items[4] = { "CONTINUE", "NEW GAME", "FREE PLAY", "OPTIONS" };
+    int first = title_opts ? 0 : title_saved ? 0 : 1;   // no CONTINUE without a save
+    int last = title_opts ? 2 : 3;
     if (title_cursor < first) title_cursor = first;
-    if (hit & KEY_UP) { title_cursor = title_cursor > first ? title_cursor - 1 : 2; title_confirm = 0; sfx(SFX_MOVE); }
-    if (hit & KEY_DOWN) { title_cursor = title_cursor < 2 ? title_cursor + 1 : first; title_confirm = 0; sfx(SFX_MOVE); }
-    if (hit & (KEY_A | KEY_START)) {
+    if (hit & KEY_UP) { title_cursor = title_cursor > first ? title_cursor - 1 : last; title_confirm = 0; sfx(SFX_MOVE); }
+    if (hit & KEY_DOWN) { title_cursor = title_cursor < last ? title_cursor + 1 : first; title_confirm = 0; sfx(SFX_MOVE); }
+    if (title_opts) {
+        // OPTIONS: music and sound effects on or off, kept with the save.
+        if ((hit & KEY_B) || ((hit & (KEY_A | KEY_START)) && title_cursor == 2)) {
+            sfx(SFX_BACK);
+            title_opts = 0;
+            title_cursor = 3;
+        } else if (hit & (KEY_A | KEY_START)) {
+            if (title_cursor == 0) music_toggle();
+            else { sfx_off ^= 1; if (sfx_off) sfx_stop_all(); }
+            settings_save();
+            sfx(SFX_SELECT);
+        }
+    } else if (hit & (KEY_A | KEY_START)) {
         sfx(SFX_SELECT);
         if (title_cursor == 0) {
             int phase = load_game();
@@ -442,7 +468,8 @@ void title_update(u8* back) {
         } else if (title_cursor == 1) {
             if (title_saved && !title_confirm) title_confirm = 1;   // ask before replacing a save
             else { new_game(); set_scene(SC_INTRO); }
-        } else set_scene(SC_FREE);
+        } else if (title_cursor == 2) set_scene(SC_FREE);
+        else { title_opts = 1; title_cursor = 0; }
     }
     sky_frame(back);
     text_center(back, LOGO_Y + 46, "A COZY FIREWORK SHOP", UI_WHITE);
@@ -453,7 +480,15 @@ void title_update(u8* back) {
     for (int k = 0; k < 4; k++) sprite(k * 64, LOGO_Y, T_LOGO + k * 32, 1, 3, 5);
     for (int k = 0; k < 8; k++) sprite(k * 32, LOGO_Y + 32, T_LOGO + 128 + k * 4, 1, 1, 5);
     hide_box(0, LOGO_Y - 4, 240, 48);               // no moon or stars over the logo
-    for (int i = first; i < 3; i++) {
+    if (title_opts) {
+        const char* opts[3] = { music_off ? "MUSIC: OFF" : "MUSIC: ON",
+                                sfx_off ? "SOUND EFFECTS: OFF" : "SOUND EFFECTS: ON", "BACK" };
+        for (int i = 0; i < 3; i++) {
+            int y = LOGO_Y + 62 + i * 11;
+            text(back, 74, y, opts[i], title_cursor == i ? UI_YELLOW : UI_WHITE);
+            if (title_cursor == i) text(back, 64, y, ">", UI_YELLOW);
+        }
+    } else for (int i = first; i <= (title_confirm ? 1 : 3); i++) {   // the question takes the space below
         int y = LOGO_Y + 62 + (i - first) * 11;
         text(back, 90, y, items[i], title_cursor == i ? UI_YELLOW : UI_WHITE);
         if (title_cursor == i) text(back, 80, y, ">", UI_YELLOW);
@@ -553,10 +588,10 @@ void nightshow_update(u8* back) {
     }
     if (hit & KEY_START) ns_idx = ncrate;   // skip the rest of the launches
     sky_frame(back);
-    char head[24];
-    char* p = cat(head, "NIGHT ");
-    p = cat_num(p, night);
-    cat(p, " - THE SHOW");
+    char head[32];
+    char* p = head;
+    if (festival_night(night)) cat(p, festival_names[festival_night(night)]);   // the festival's show
+    else { p = cat(p, "NIGHT "); p = cat_num(p, night); cat(p, " - THE SHOW"); }
     text_center(back, 4, head, UI_YELLOW);
     show_sprites();
 }
@@ -876,7 +911,7 @@ int review_shake(void) {               // screen offset for this frame's shake
 
 static const char* const intro_pages[] = {
     "THERE YOU ARE, LUKE! COME HERE, SWEETHEART. LET ME GET A GOOD LOOK AT YOU.",
-    "FORTY YEARS I'VE RUN THIS LITTLE FIREWORK SHOP. NOW IT'S YOURS. THE TOWN NEEDS ITS FIREWORKS.",
+    "FORTY YEARS I'VE RUN THIS LITTLE FIREWORK SHOP IN PORT WILLOW. NOW IT'S YOURS. THE TOWN NEEDS ITS FIREWORKS.",
     "EACH NIGHT, YOU OPEN UP. FOLKS COME IN AND TELL YOU WHAT THEY'D LOVE TO SEE IN THE SKY.",
     "YOU BUILD EACH ONE AT THE COUNTER: A SIZE, A PATTERN, A COLOR. (D-PAD TO PICK, A TO CHOOSE, B TO GO BACK.)",
     "FANCY ONES TAKE LONGER, AND YOU CLOSE AT 1 AM. YOU CAN'T MAKE EVERYTHING, SO CHOOSE WISELY.",

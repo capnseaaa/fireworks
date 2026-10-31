@@ -4,12 +4,13 @@ A cozy firework-making game for the Game Boy Advance, played in emulators (built
 
 Planned loop: by day, gather materials around town and sometimes find new patterns. By night, customers ask for fireworks and you build them from a quick menu. At the end of the night, everything you made goes up in a show.
 
-## Current state: v0.11.2, sounds of each place, shorter days, Luke
-- **Title:** CONTINUE, NEW GAME, or FREE PLAY (the v0.1 sandbox; SELECT+START returns to the title).
-- **Intro:** Grandma hands her firework shop in a seaside town to her grandson, Luke (you). Nine short pages in her words, with the controls in brackets. START skips it.
+## Current state: v0.12.0, Grandma's visits, festivals, Port Willow
+- **Title:** CONTINUE, NEW GAME, FREE PLAY (the v0.1 sandbox; SELECT+START returns to the title), or OPTIONS (music and sound effects on or off, remembered between plays).
+- **Intro:** Grandma hands her firework shop in the seaside town of Port Willow to her grandson, Luke (you). Nine short pages in her words, with the controls in brackets. START skips it.
 - **Saving:** the game saves itself at the start of every night and every day. CONTINUE picks up there. NEW GAME asks before replacing a save.
 - **Night:** customers walk up with requests, some exact ("A BIG RED PEONY"), some vague ("A PERFECT CIRCLE IN THE SKY"). Build each one from quick menus: size, pattern, color. Bigger and fancier fireworks take more time on the night clock (8:00 PM to 1:00 AM) and use powder, shells, and colored stars. Or turn a customer away.
 - **Second color:** after the color, pick a SECOND COLOR (or NONE). It costs another star and 5 minutes and pays a little more. Peonies get a core in the second color; other patterns mix their stars. Some customers ask for two colors.
+- **Quick serving:** each crafting menu opens on what the customer asked for, so a clear order is mostly pressing A.
 - **Show order:** at closing, arrange tonight's fireworks (A picks one up and puts it down), then BEGIN THE SHOW. End on a large firework for a grand finale bonus at review time.
 - **The show:** every firework you made goes up, in your order, in volleys of two or three across the sky; the finale goes up alone. You don't see whose is whose.
 - **Review time:** each customer's comment pops up over the town, then the night gets a 0-5 star rating with coins, reputation, and gifts.
@@ -21,6 +22,8 @@ Planned loop: by day, gather materials around town and sometimes find new patter
   - Quarry (EXPLORE, needs the rope): a stepped stone pit, terraces of cut stone winding down to a pond, with an old workshop shed and a rusted crane on the rim. Break white stone (white stars), gold-flecked stone (gold), and silver (deeper down; needs pickaxe II); search old crates for scrolls or odd stars. CLIMB THE CLIFF: press the hold shown (L, R, or UP) before it fades; higher means more stars, and an eagle's nest at the top may hold a scroll.
   - Market: powder, shells, any colored star, and the tools.
   - START opens the bag. Home opens the shop for the night.
+- **Grandma:** she drops by some mornings with a chat and a gift (one of her old scrolls, rare stars, or coins), always on day 3. Other mornings bring a letter from her with a tip or a family story.
+- **Festival nights:** now and then (first on night 6, then at irregular gaps) Port Willow holds a festival: the Lantern Festival, Harbor Days, the Starfall Fair, or Willow Night. The morning tells you, customers come twice as often, and everyone pays 25% more.
 - **Upgrades** (Home > IMPROVE THE SHOP, during the day): Workbench (3 levels, 15% faster each), Late Hours (2 levels, open until 2 then 3 AM), Shop Sign (2 levels, 15% more pay each), Display Shelf (you notice what customers secretly love). The top levels need a reputation title.
 - **Reputation titles:** Newcomer, Local Favorite (10), Town Treasure (25), Legend (50). Each title means bigger orders and 10% more pay. A new title is announced at review time.
 - **Hidden likes:** a customer may secretly love a color, pattern, or size. Hit it (even by accident) and they love it: more coins and rep, plus a gift: colored stars, a tip, or a scroll that teaches a new pattern.
@@ -35,7 +38,7 @@ Hold L+R and press B (almost anywhere) for a test menu: +1000 coins, max materia
 - Sound effects play on DirectSound A at 13379 Hz through a 6-voice mixer that runs in the VBlank interrupt (`src/render.c`). Firework sounds are synthesized by `tools/synth.c`; menu, coin, and tool sounds are CC0 recordings in `sfx/` (credits in `sfx/CREDITS.md`).
 
 ## How it draws
-- Mode 4 bitmap, two pages. Up to 1600 particles, simulated and drawn by ARM code in IWRAM (`src/render.c`).
+- Mode 4 bitmap, two pages. Up to 1600 particles, simulated and drawn by ARM code in IWRAM (`src/render.c`). In a very busy sky, trails draw with fewer dots and new bursts get fewer stars, so the show stays at full speed.
 - In the show, the particle layer is blended additively over the sky, a per-scanline gradient set by an HBlank interrupt. Bursts light up the sky and town in their color.
 - The shop is a full bitmap scene redrawn only when something changes; menus and text are drawn into the bitmap. Customers are sprites recolored per customer.
 - The day map is a full bitmap in its own palette, drawn GBA-RPG style (outlines, top-left light, shadows).
@@ -50,3 +53,8 @@ sh starbloom/test/run.sh test/night.txt        # headless run, screenshots in st
 ```
 
 Tests need `libmgba` (uses `../third_party/mgba` when present).
+
+## SD card (R36) and other setups
+`sh starbloom/tools/package.sh` builds and writes `release/`: the ROM, the image for the R36's game list, a
+`gamelist-entry.xml` block, and `starbloom-art.zip` with the art sorted for each setup. How to install it:
+[docs/INSTALL.md](docs/INSTALL.md).

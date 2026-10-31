@@ -432,7 +432,7 @@ int judge_shell(const Shell* s, char* comment, char* gift) {
     int liked, rel[3];
     int tier = judge(s, &liked, rel);
     int pay = size_pay[s->size] + pat_time[s->pat] / 2 + (s->hue2 >= 0 ? 4 : 0);
-    pay = pay * (100 + 15 * upg[UPG_SIGN] + 10 * rep_tier()) / 100;   // the sign and your name
+    pay = pay * (100 + 15 * upg[UPG_SIGN] + 10 * rep_tier() + (festival_night(night) ? 25 : 0)) / 100;   // the sign, your name, a festival
     int drep = 0;
     comment_for(comment, s, tier, rel);
     switch (tier) {
@@ -614,6 +614,15 @@ static void build_menu(void) {
     }
 }
 
+// A menu opens on what the customer asked for (any of the values in mask), if you can
+// make it, so serving them is mostly pressing A. Only on a menu's first frame, and not
+// when coming back to it with B (the cursor is already on your earlier pick).
+static void pick_wanted(u32 mask) {
+    if (st_t != 1 || cursor != 0 || !mask) return;
+    for (int i = 0; i < menu_n; i++)
+        if (menu_ok[i] && menu_val[i] < 32 && ((mask >> menu_val[i]) & 1)) { cursor = i; build_menu(); return; }
+}
+
 static int menu_update(void) {
     // Returns the chosen value, -1 for nothing yet, -2 for back.
     if (st_t == 1 && !menu_ok[cursor])            // start on something you can pick
@@ -707,6 +716,7 @@ void shop_enter(void) {
     char buf[160], *p = cat(buf, "NIGHT ");
     p = cat_num(p, night);
     p = cat(p, ". I FLIP THE SIGN TO OPEN.");
+    if (festival_night(night)) { p = cat(p, " IT'S THE "); p = cat(p, festival_names[festival_night(night)]); p = cat(p, ", AND THE STREETS ARE FULL!"); }
     if (upg[UPG_HOURS]) { p = cat(p, " OPEN UNTIL "); p = time_str(p, close_min()); p = cat(p, "."); }
     if (night == 1) cat(p, " HERE COMES MY FIRST CUSTOMER! (A TO TALK.)");
     say(0, buf);
@@ -753,24 +763,28 @@ static void step(void) {
         break;
     case ST_SIZE:
         build_menu();
+        pick_wanted(cu.want_size >= 0 ? 1u << cu.want_size : 0);
         v = menu_update();
         if (v == -2) go(ST_CHOICE);
         else if (v >= 0) { sel_size = v; go(ST_PAT); }
         break;
     case ST_PAT:
         build_menu();
+        pick_wanted(cu.want_pats);
         v = menu_update();
         if (v == -2) { go(ST_SIZE); cursor = sel_size; }
         else if (v >= 0) { sel_pat = v; go(ST_COLOR); }
         break;
     case ST_COLOR:
         build_menu();
+        pick_wanted(cu.want_hue >= 0 ? 1u << cu.want_hue : 0);
         v = menu_update();
         if (v == -2) go(ST_PAT);
         else if (v >= 0) { sel_hue = v; go(ST_COLOR2); }
         break;
     case ST_COLOR2:
         build_menu();
+        pick_wanted(cu.want_hue2 >= 0 ? 1u << cu.want_hue2 : 0);
         v = menu_update();
         if (v == -2) go(ST_COLOR);
         else if (v >= 0) { sel_hue2 = v == 255 ? -1 : v; go(ST_CONFIRM); }
@@ -829,7 +843,7 @@ static void step(void) {
         cx -= 3;
         if (cx < -40) {
             show_cust = 0;
-            shop_min += ARRIVE_MIN;
+            shop_min += festival_night(night) ? ARRIVE_MIN / 2 : ARRIVE_MIN;   // a festival crowd
             if (shop_min > close_min()) shop_min = close_min();
             next_customer();
         }

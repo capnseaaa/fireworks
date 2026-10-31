@@ -1,0 +1,25 @@
+# Grandma visits on day 3 (a chat, then her gift), and night 6 is a festival.
+40 0
+1 0 !$night=3,$coins=100
+1 0 !$next_scene=5
+30 0 e_day.ppm
+1 1
+1 0
+10 0 e_visit.ppm
+1 1
+1 0
+10 0 e_gift.ppm
+1 0 @$coins,$known
+1 0 !$next_scene=2
+10 0
+1 0 !$night=6
+1 0 !$next_scene=5
+30 0 e_day6.ppm
+1 1
+1 0
+10 0 e_fest.ppm
+1 1
+1 0
+10 0
+1 0 !$next_scene=2
+40 0 e_shop6.ppm

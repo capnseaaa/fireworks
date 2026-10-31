@@ -55,6 +55,17 @@ static int st_t, here, sel, cursor, bag_open;
 static int work_spot, work_from, work_price;
 static u32 used;                       // spots done today (bit per spot)
 static char msg[160];
+// The morning's pages: the day's note, then maybe a festival, a visit, or a letter.
+static const char* page_label[4];
+static char page_text[4][160];
+static int npages, page_i;
+
+static void add_page(const char* label, const char* text) {
+    if (npages >= 4) return;
+    page_label[npages] = label;
+    page_text[npages][0] = 0;
+    cat(page_text[npages++], text);
+}
 static u32 page_sig[2];
 static int menu_x0 = 240, menu_y1;     // the open menu box (the player marker hides under it)
 static int upg_result;                 // the result came from buying an upgrade
@@ -249,6 +260,23 @@ void day_enter(void) {
     p = cat_num(p, night);
     p = cat(p, ". TIME TO GATHER SUPPLIES FOR TONIGHT.");
     if (night == 2) cat(p, " EVERY WALK TAKES TIME, AND THE SUN SETS AT 6 PM. (D-PAD TO PICK A PLACE, A TO GO.)");
+    npages = page_i = 0;
+    add_page(0, msg);
+    int fest = festival_night(night);
+    if (fest) {
+        p = cat(msg, "TONIGHT IS PORT WILLOW'S ");
+        p = cat(p, festival_names[fest]);
+        cat(p, "! THE WHOLE TOWN WILL BE OUT. EXPECT A CROWD, AND BIGGER TIPS.");
+        add_page(0, msg);
+    }
+    // The gift comes after the morning's save, so reloading this day gives it again
+    // (once) rather than losing it.
+    int ev = day_event(night);
+    if (ev == EV_VISIT) {
+        add_page("GRANDMA", visit_text(night));
+        visit_gift(night, msg);
+        add_page(0, msg);
+    } else if (ev == EV_LETTER) add_page("A LETTER FROM GRANDMA", letter_text(night));
     go(DS_INTRO);
 }
 
@@ -278,7 +306,10 @@ static void step(void) {
     if (b && day_st != DS_INTRO && day_st != DS_RESULT && day_st != DS_DUSK) sfx(SFX_BACK);
     switch (day_st) {
     case DS_INTRO:
-        if (a) go(DS_MAP);
+        if (a) {
+            if (++page_i < npages) sfx_ex(SFX_PAGE, 40, 256);
+            else go(DS_MAP);
+        }
         break;
     case DS_MAP:
         if (hit & KEY_LEFT) sel = area_toward(-1, 0);
@@ -483,6 +514,12 @@ static void draw_page(u8* back) {
     box(back, 0, 116, 240, 44);
     switch (day_st) {
     case DS_INTRO:
+        if (page_label[page_i]) {
+            text(back, 8, 121, page_label[page_i], UI_YELLOW);
+            draw_lines(back, page_text[page_i], 130, 3, UI_WHITE);
+        } else draw_lines(back, page_text[page_i], 121, 4, UI_WHITE);
+        if (page_i + 1 < npages && (frame & 16)) fill_rect(back, 226, 152, 5, 3, UI_YELLOW);
+        break;
     case DS_RESULT:
     case DS_DUSK:
         draw_lines(back, msg, 121, 4, UI_WHITE);
@@ -601,7 +638,8 @@ void day_update(u8* back) {
     // Redraw a page only when what it shows changed.
     u32 sig = 2166136261u;
     int vals[] = { day_st, sel, here, cursor, day_min, coins, bag_open, day_st == DS_WORK ? st_t : 0, powder, shells,
-                   stock[0] + stock[1] * 3 + stock[cursor % NCOLORS] * 7 };
+                   stock[0] + stock[1] * 3 + stock[cursor % NCOLORS] * 7,
+                   day_st == DS_INTRO ? page_i * 2 + (page_i + 1 < npages && (frame & 16) ? 1 : 0) : 0 };
     for (unsigned i = 0; i < sizeof vals / sizeof vals[0]; i++) sig = (sig ^ (u32)vals[i]) * 16777619u;
     for (int i = 0; msg[i]; i += 3) sig = (sig ^ (u8)msg[i]) * 16777619u;   // the words themselves
     int pi = back == PAGE1;

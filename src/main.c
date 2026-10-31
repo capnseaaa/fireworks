@@ -80,6 +80,7 @@ int main(void) {
     REG_BG2X = 0; REG_BG2Y = 0;
     IRQ_VECTOR = (u32)irq_handler;
     sound_init();
+    settings_load();
     REG_DISPSTAT = (1 << 3) | (1 << 4);   // VBlank (sound) and HBlank (sky gradient) interrupts
     REG_IE = 3;
     REG_IF = 0xFFFF;

@@ -10,6 +10,7 @@ Burst bursts[MAXBURST];
 int nbursts;
 u32 rng_state = 0x1234567;
 u16 grad[160];
+int lod;                        // 0 full detail; 1, 2: trails drawn with 1/2, 1/4 the dots
 
 // ---- sound -------------------------------------------------------------------------
 // Sound effects: up to NVOICE samples mixed in software into DirectSound A at 13379 Hz,
@@ -208,8 +209,12 @@ IWRAM_CODE void step_draw(u8* page) {
         plot(page, x >> 6, y >> 6, base + lv);
         int t = k->trail;
         if (t) {
-            int dx = (vx >> 2) * k->spacing, dy = (vy >> 2) * k->spacing;
-            int fade = k->fade;
+            // When the sky is busy, the same trail with fewer, wider-spaced dots.
+            int l = lod;
+            t >>= l;
+            if (!t) t = 1;
+            int dx = ((vx >> 2) * k->spacing) << l, dy = ((vy >> 2) * k->spacing) << l;
+            int fade = k->fade << l;
             while (t--) {
                 lv -= fade;
                 if (lv < 0) break;

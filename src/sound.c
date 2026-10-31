@@ -66,7 +66,23 @@ void sfx_stop_all(void) {
     for (int i = 0; i < 8; i++) later[i].wait = 0;
 }
 
-// Turns the music on or off (the dev menu). On again, the song starts over.
+// The OPTIONS settings live at the far end of the save memory, away from the game's save,
+// so they never touch it: a tag, then music off, sound effects off.
+#define SETTINGS ((volatile u8*)0x0E007F00)
+
+void settings_load(void) {
+    if (SETTINGS[0] != 'S' || SETTINGS[1] != 'B' || SETTINGS[2] != 'O' || SETTINGS[3] != '1') return;
+    music_off = SETTINGS[4] & 1;
+    sfx_off = SETTINGS[5] & 1;
+}
+
+void settings_save(void) {
+    SETTINGS[0] = 'S'; SETTINGS[1] = 'B'; SETTINGS[2] = 'O'; SETTINGS[3] = '1';
+    SETTINGS[4] = music_off;
+    SETTINGS[5] = sfx_off;
+}
+
+// Turns the music on or off (OPTIONS, the dev menu). On again, the song starts over.
 void music_toggle(void) {
     int s = cur_song;
     music_off ^= 1;

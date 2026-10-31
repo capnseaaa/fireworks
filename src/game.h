@@ -51,6 +51,8 @@ void sfx_later(int id, int vol, int pitch, int frames);
 void sfx_stop_all(void);
 void music(int song);             // keeps playing if it already is; -1 = silence
 void music_toggle(void);
+void settings_load(void);         // OPTIONS, kept in save memory apart from the game
+void settings_save(void);
 extern int music_off, sfx_off;
 
 // --- render.c (ARM, IWRAM) ---
@@ -98,6 +100,15 @@ int geodes_done(void);
 int climb_done(void);
 void field_enter(void);
 void field_update(u8* back);
+
+// --- events.c: Grandma's visits and letters, festival nights ---
+enum { EV_NONE, EV_VISIT, EV_LETTER };
+int day_event(int day);           // what the morning brings
+const char* visit_text(int day);
+const char* letter_text(int day);
+void visit_gift(int day, char* out);   // gives it, and says what it was
+int festival_night(int night);    // 0, or which festival (festival_names)
+extern const char* const festival_names[5];
 
 // --- dev.c: L+R+B test menu ---
 int dev_wanted(void);

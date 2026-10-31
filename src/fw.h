@@ -54,6 +54,7 @@ static inline u32 rnd(void) {
 }
 
 extern u16 grad[160];     // sky color per scanline, set by the HBlank interrupt
+extern int lod;           // detail level for busy skies (0 = full)
 
 // A sound effect playing. pos, end, and step are 20.12 fixed point sample positions.
 typedef struct { const s8* data; u32 pos, end, step; int vol; u32 age; } Voice;
